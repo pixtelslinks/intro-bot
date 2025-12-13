@@ -1,6 +1,7 @@
 # Intro Bot
 
 Finding intros is a slog
+
 !intro finds them faster
 
 ## Setup (for personal use)
@@ -16,7 +17,7 @@ If you want to run this as your own bot [you'll need to get a Discord bot token 
    DISCORD_TOKEN=your-bot-token-here
    ```
    **Note:** Replace `your-bot-token-here` in `.env` with your actual Discord bot token.
-   
+
 3. Start the bot:
    ```bash
    npm start
