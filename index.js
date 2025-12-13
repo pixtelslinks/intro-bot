@@ -18,10 +18,10 @@ client.login(process.env.DISCORD_TOKEN);
 //functions
 
 /**
- * Finds the first (or last) message sent by a specific user in a channel.
- * @param {TextChannel} channel - The channel to search in.
- * @param {string} userId - The ID of the user to search for.
- * @param {boolean} [before=false] - When true, searches in the opposite direction and returns the last message by the user; when false, returns the first message.
+ * finds the first (or last) message sent by a specific user in a channel.
+ * @param {TextChannel} channel - the channel to search in.
+ * @param {string} userId - the ID of the user to search for.
+ * @param {boolean} [before=false] - when true, searches in the opposite direction and returns the last message by the user; when false, returns the first message.
  */
 async function findFirstMessageByUser(channel, userId, isBefore = false) {
     let lastMessageId = isBefore ? (channel.lastMessageId ?? channel.id) : channel.id;
@@ -50,4 +50,24 @@ async function findFirstMessageByUser(channel, userId, isBefore = false) {
         }
     }
     return targetMessage;
+}
+
+/**
+ * caches the message ID of the intro message for a specific user as `userid: messageId`
+ * @param {string} userId 
+ * @param {string} messageId 
+ */
+async function writeToIntroCache(userId, messageId) {
+    let writeBack;
+    try {
+        const gameSave = fs.readFileSync("./intro-cache.json", 'utf8');
+        writeBack = JSON.parse(gameSave);
+    } catch (err) {
+        writeBack = {}; // if the file doesn't exist or is empty
+    }
+    writeBack[userId] = messageId;
+    try {
+        fs.writeFileSync('./intro-cache.json', JSON.stringify(writeBack, null, 2));
+    } catch (error) {
+    }
 }
