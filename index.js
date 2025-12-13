@@ -27,9 +27,6 @@ async function findFirstMessageByUser(channel, userId, isBefore = false) {
     let lastMessageId = isBefore ? (channel.lastMessageId ?? channel.id) : channel.id;
     let targetMessage = null;
     let hasMoreMessages = true;
-
-    console.log(`Searching for user ${userId} in #${channel.name}...`);
-
     while (hasMoreMessages && !targetMessage) {
         const fetchOptions = { limit: 100 };
         if (lastMessageId !== channel.id) {
@@ -61,9 +58,6 @@ async function findAllMessagesByUser(channel, userId) {
     let lastMessageId = channel.id;
     let messagesByUser = [];
     let hasMoreMessages = true;
-
-    console.log(`Searching for user ${userId} in #${channel.name}...`);
-
     while (hasMoreMessages && !targetMessage) {
         const fetchOptions = { limit: 100 };
         if (lastMessageId !== channel.id) {
@@ -94,8 +88,8 @@ async function findAllMessagesByUser(channel, userId) {
 async function writeToIntroCache(userId, messageId) {
     let writeBack;
     try {
-        const gameSave = fs.readFileSync("./intro-cache.json", 'utf8');
-        writeBack = JSON.parse(gameSave);
+        const save = fs.readFileSync("./intro-cache.json", 'utf8');
+        writeBack = JSON.parse(save);
     } catch (err) {
         writeBack = {}; // if the file doesn't exist or is empty
     }
@@ -103,5 +97,18 @@ async function writeToIntroCache(userId, messageId) {
     try {
         fs.writeFileSync('./intro-cache.json', JSON.stringify(writeBack, null, 2));
     } catch (error) {
+    }
+}
+
+/** retrieves the cached intro message ID for a specific user
+ * @param {string} userId - the ID of the user
+ */
+async function readFromIntroCache(userId) {
+    try {
+        const save = fs.readFileSync("./intro-cache.json", 'utf8');
+        const parsed = JSON.parse(save);
+        return parsed[userId];
+    } catch (err) {
+        return null;
     }
 }
