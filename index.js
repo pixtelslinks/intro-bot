@@ -53,12 +53,12 @@ async function findFirstMessageByUser(channel, userId, isBefore = false) {
 }
 
 /**
- * finds all messages sent by a specific user in a channel. and returns them as an array.
+ * finds all messages sent by a specific user in a channel and returns them as an array.
  * @param {TextChannel} channel - the channel to search in.
  * @param {string} userId - the ID of the user to search for.
  */
 async function findAllMessagesByUser(channel, userId) {
-    let lastMessageId = isBefore ? (channel.lastMessageId ?? channel.id) : channel.id;
+    let lastMessageId = channel.id;
     let messagesByUser = [];
     let hasMoreMessages = true;
 
