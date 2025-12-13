@@ -54,8 +54,8 @@ async function findFirstMessageByUser(channel, userId, isBefore = false) {
 
 /**
  * caches the message ID of the intro message for a specific user as `userid: messageId`
- * @param {string} userId 
- * @param {string} messageId 
+ * @param {string} userId - the ID of the user
+ * @param {string} messageId - the ID of the intro message
  */
 async function writeToIntroCache(userId, messageId) {
     let writeBack;
