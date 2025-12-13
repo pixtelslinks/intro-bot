@@ -1,8 +1,11 @@
 # Intro Bot
 
-A basic Discord bot using discord.js.
+Finding intros is a slog
+!intro finds them faster
 
-## Setup
+## Setup (for personal use)
+
+If you want to run this as your own bot [you'll need to get a Discord bot token first](https://discord.com/developers/docs/quick-start/getting-started)
 
 1. Install dependencies:
    ```bash
@@ -12,15 +15,30 @@ A basic Discord bot using discord.js.
    ```env
    DISCORD_TOKEN=your-bot-token-here
    ```
+   **Note:** Replace `your-bot-token-here` in `.env` with your actual Discord bot token.
+   
 3. Start the bot:
    ```bash
    npm start
    ```
 
 ## Usage
-- The bot will log in and print a message when ready.
-- Responds to `!ping` with `Pong!` in any channel it can read.
+- After your bot joins your server, you'll want to configure it with `!intro config`
+
+Add your server's intro channel
+```
+!intro config add {channel-id}
+```
+
+Configure your prefered scraping mode
+- `first` finds the oldest message from each user
+- `last` finds the most recent message from each user
+- `largest` finds the largest message from each user by character length
+- `smart` finds the most recent, but large enough message from each user
+
+```
+!intro config mode {first|last|largest|smart}
+```
 
 ---
 
-**Note:** Replace `your-bot-token-here` in `.env` with your actual Discord bot token.
