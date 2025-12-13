@@ -53,6 +53,40 @@ async function findFirstMessageByUser(channel, userId, isBefore = false) {
 }
 
 /**
+ * finds all messages sent by a specific user in a channel. and returns them as an array.
+ * @param {TextChannel} channel - the channel to search in.
+ * @param {string} userId - the ID of the user to search for.
+ */
+async function findAllMessagesByUser(channel, userId) {
+    let lastMessageId = isBefore ? (channel.lastMessageId ?? channel.id) : channel.id;
+    let messagesByUser = [];
+    let hasMoreMessages = true;
+
+    console.log(`Searching for user ${userId} in #${channel.name}...`);
+
+    while (hasMoreMessages && !targetMessage) {
+        const fetchOptions = { limit: 100 };
+        if (lastMessageId !== channel.id) {
+            fetchOptions[isBefore ? 'before' : 'after'] = lastMessageId;
+        }
+        const messages = await channel.messages.fetch(fetchOptions);
+
+        if (messages.size === 0) {
+            hasMoreMessages = false;
+            break;
+        }
+        for (const [id, message] of messages) {
+            if (message.author.id === userId) {
+                targetMessage = message;
+                messagesByUser.push(message);
+            }
+            lastMessageId = id;
+        }
+    }
+    return messagesByUser;
+}
+
+/**
  * caches the message ID of the intro message for a specific user as `userid: messageId`
  * @param {string} userId - the ID of the user
  * @param {string} messageId - the ID of the intro message
