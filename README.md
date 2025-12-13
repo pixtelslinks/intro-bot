@@ -41,5 +41,7 @@ Configure your prefered scraping mode
 !intro config mode {first|last|largest|smart}
 ```
 
----
-
+finally, find any user's intro message with a mention, username, or user ID
+```
+!intro @mention
+```
