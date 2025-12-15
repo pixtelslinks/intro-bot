@@ -1,11 +1,20 @@
-const { cache } = require("react");
-
-// ecosystem.config.js
 module.exports = {
     apps: [{
-        name: "intro-bot",
-        script: "index.js",
-        watch: true,
-        ignore_watch: ["node_modules", "configs.json", "intro-cache.json", ".git", "*.log"],
-    }]
+        script: 'index.js',
+        watch: 'index.js',
+        ignore_watch: ["node_modules", "configs.json", "intro-cache.json", ".git", "*.log"]
+    }],
+
+    deploy: {
+        production: {
+            user: 'SSH_USERNAME',
+            host: 'SSH_HOSTMACHINE',
+            ref: 'origin/master',
+            repo: 'GIT_REPOSITORY',
+            path: 'DESTINATION_PATH',
+            'pre-deploy-local': '',
+            'post-deploy': 'npm install && pm2 reload ecosystem.config.js --env production',
+            'pre-setup': ''
+        }
+    }
 };
