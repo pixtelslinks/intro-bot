@@ -1,4 +1,5 @@
 .env
 configs.json
 intro-cache.json
+overrides.json
 node_modules/
