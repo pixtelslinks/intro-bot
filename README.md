@@ -1,62 +1,124 @@
 # !ntro
 
-Finding intros is a slog
+Quickly find people’s introduction messages in Discord servers.
 
-*!ntro* finds them faster
+## Features
 
-## Setup (for personal use)
+- Automatic message scraping.
+- Multiple scraping modes: oldest, newest, longest, or a simple "smart" heuristic.
+- Lookup by mention, username, or ID; use `me` to fetch your own intro.
 
-If you want to run this as your own bot [you'll need to get a Discord bot token first](https://discord.com/developers/docs/quick-start/getting-started)
+## Setup (personal use)
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Create a `.env` file in the root directory and add your Discord bot token:
-   ```env
-   DISCORD_TOKEN={bot-token}
-   ```
-   **Note:** Replace `your-bot-token-here` in `.env` with your actual Discord bot token.
+1. Clone repository:
 
-3. Start the bot:
-   ```bash
-   npx pm2 start
-   ```
-   This will run an instance of the bot in the background with pm2.
+```bash
+git clone https://github.com/pixtelslinks/intro-bot.git
+cd intro-bot
+```
 
-4. To stop the bot:
-   ```
-   npx pm2 stop ecosystem.config.js
-   ```
+2. Install dependencies:
 
-## Usage
-- After your bot joins your server, you'll want to configure it with `!intro config`
+```bash
+npm install
+```
 
-  **Note:** you can use `!ntro`, `!intro` or just pinging @!ntro interchangably
+3. Create a `.env` file in the project root with your Discord token:
 
-- Add your server's intro channel
-  ```
-  !ntro config add #channel
-  ```
-  This command also takes a channel ID as an argument.
+```env
+DISCORD_TOKEN=discord-bot-token
+```
 
+4. Run the bot with pm2 (recommended for background processes):
 
-- Configure your prefered scraping mode
-  - `first` finds the oldest message from each user
-  - `last` finds the most recent message from each user
-  - `largest` finds the largest message from each user by character length
-  - `smart` finds the most recent, but larger than average message from each user
+```bash
+npx pm2 start ecosystem.config.js
+```
 
-  ```
-  !intro config mode [first|last|largest|smart]
-  ```
+5. Stop the bot:
 
-- Finally, find any user's intro message with a mention, username, or user ID
-  ```
-  !ntro @mention
-  ```
+```bash
+npx pm2 stop ecosystem.config.js
+```
 
-  To get your own intro, just use `me`
-  ```
-  !ntro me
-  ```
+## Commands
+
+### Configuration
+
+These require the 'Manage Channels' privilege to use.
+
+- Configure the bot (after inviting it to your server):
+
+```text
+!ntro config
+```
+
+- Add an intro channel by mention or ID:
+
+```text
+!ntro config channel [#channel|channelID]
+```
+
+- Set scraping mode:
+
+```text
+!ntro config mode [first|last|largest|smart]
+```
+
+Modes explained:
+- `first` — choose each user’s oldest message in the configured channels.
+- `last` — choose each user’s most recent message.
+- `largest` — choose the longest message by character count.
+- `smart` — prefer recent messages that are larger than the average (heuristic).
+
+### Usage
+
+- Look up any user by mention, username, or ID:
+
+```text
+!ntro @user
+!ntro username
+!ntro 123456789012345678
+```
+
+- To fetch your own intro, use:
+
+```text
+!ntro me
+```
+
+- To re-cache your intro:
+
+```text
+!ntro update
+```
+
+- To override your intro with a specific message:
+
+```text
+!ntro override message-link
+```
+
+- To clear your message override & re-cache:
+
+```text
+!ntro update force
+```
+
+- Update all messages in a server (requires privileges)
+
+```text
+!ntro update all
+```
+
+## Development
+
+- After installing locally with the setup instructions, run the project:
+
+```bash
+npx nodemon --ignore '*.json'
+```
+
+## Contributing
+
+PRs and issues are welcome. Keep changes focused and add tests where appropriate.
