@@ -2,6 +2,13 @@
 
 Quickly find people’s introduction messages in Discord servers.
 
+> [!NOTE]
+> I am running my own instance of this bot you can invite to your servers and use freely. 
+>
+> Please report any bugs, oversights, issues, or suggestions to `@pixtelslinks` on discord.
+>
+> [invite link](https://discord.com/oauth2/authorize?client_id=1449356510843899997)
+
 ## Features
 
 - Automatic message scraping.
