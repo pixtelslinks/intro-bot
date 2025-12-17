@@ -9,6 +9,7 @@ client.once('ready', () => {
 });
 
 client.on('messageCreate', async message => {
+    if (message.author.bot) return;
     if (message.content.startsWith('!ntro') || message.content.startsWith('!intro') || message.content.startsWith(`<@!${client.user.id}>`) || message.content.startsWith(`<@${client.user.id}>`)) {
         let args = message.content.split(' ').slice(1);
 
@@ -73,7 +74,7 @@ client.on('messageCreate', async message => {
             } else {
                 message.channel.send({ embeds: [createSimpleEmbed('You do not have permission to configure for this server', 'This command requires the Manage Channels permission', 0xC72E2E)] });
             }
-        } else if (args[0] === 'update') {
+        } else if (['update', 'refresh', 'recache'].includes(args[0])) {
             if (args[1] === 'all') {
                 if (message.member.permissions.has('ManageChannels')) {
                     const guildId = message.guild.id;
@@ -87,7 +88,7 @@ client.on('messageCreate', async message => {
                 } else {
                     message.channel.send({ embeds: [createSimpleEmbed('You do not have permission to update the intro cache for this server', 'This command requires the Manage Channels permission', 0xC72E2E)] });
                 }
-            } else if (args[1] === 'me' || !args[1]) {
+            } else if (['force', 'override', 'reset'].includes(args[1])) {
                 const userId = message.author.id;
                 const guildId = message.guild.id;
                 await clearUserIntroCache(guildId, userId);
@@ -96,14 +97,33 @@ client.on('messageCreate', async message => {
                     message.channel.send({ embeds: [createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`)] });
                     return;
                 }
-                message.channel.send({ embeds: [createSimpleEmbed('Intro Recached', `Your intro has been recached: ${introMessage.url}`)] });
+                removeGuildOverride(guildId, userId);
+                let embed = createSimpleEmbed('Intro Updated', `Your intro has been updated: ${introMessage.url}`);
+                embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!`, iconURL: client.user.displayAvatarURL() });
+                message.channel.send({ embeds: [embed] });
+            } else if (args[1] === 'me' || !args[1]) {
+                if ((await readOverridesForGuild(message.guildId)).includes(message.author.id)) {
+                    message.channel.send({ embeds: [createSimpleEmbed('Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.', 0xC72E2E)] });
+                    return;
+                }
+                const userId = message.author.id;
+                const guildId = message.guild.id;
+                await clearUserIntroCache(guildId, userId);
+                let introMessage = await findIntro(guildId, userId, message);
+                if (!introMessage) {
+                    message.channel.send({ embeds: [createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`)] });
+                    return;
+                }
+                let embed = createSimpleEmbed('Intro Updated', `Your intro has been updated: ${introMessage.url}`);
+                embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually.`, iconURL: client.user.displayAvatarURL() });
+                message.channel.send({ embeds: [embed] });
             }
         } else if (args[0] === 'override') {
             if (args[1]) {
                 const userId = message.author.id;
                 const guildId = message.guild.id;
                 const overriddenMessage = await overrideCacheWithLink(guildId, userId, args[1], message);
-                if (overriddenMessage) {
+                if (overriddenMessage.content) {
                     message.channel.send({ embeds: [createSimpleEmbed('Intro Cache Overridden', `Your intro cache has been overridden with the provided message: ${overriddenMessage.url}`)] });
                 }
             } else {
@@ -117,7 +137,9 @@ client.on('messageCreate', async message => {
                 message.channel.send({ embeds: [createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`)] });
                 return;
             }
-            message.channel.send({ embeds: [createSimpleEmbed((introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url)] });
+            let embed = createSimpleEmbed((introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url);
+            embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() });
+            message.channel.send({ embeds: [embed] });
         } else {
             (async () => {
                 const userId = await resolveUserId(args[0], message.guildId);
@@ -143,7 +165,9 @@ client.on('messageCreate', async message => {
                     message.channel.send({ embeds: [createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`)] });
                     return;
                 }
-                message.channel.send({ embeds: [createSimpleEmbed((introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url)] });
+                let embed = createSimpleEmbed((introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url);
+                embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() });
+                message.channel.send({ embeds: [embed] });
             })();
         }
     }
@@ -206,56 +230,31 @@ async function findIntro(guildId, userId, message) {
 }
 
 /**
- * finds the first (or last) message sent by a specific user in a channel.
+ * finds all messages sent by a specific user in a channel and returns them as an array.
  * @param {TextChannel} channel - the channel to search in.
  * @param {string} userId - the ID of the user to search for.
- * @param {boolean} [before=false] - when true, searches in the opposite direction and returns the last message by the user; when false, returns the first message.
- * @return {Promise<Message|null>} - the first (or last) message sent by the user, or null if not found.
+ * @return {Promise<Message[]>} - an array of messages sent by the user.
  */
-async function findFirstMessageByUser(channel, userId, isBefore = false) {
-    console.log('AA')
-    let lastMessageId = isBefore ? (channel.lastMessageId ?? channel.id) : channel.id;
-    let targetMessage = null;
-    let hasMoreMessages = true;
-    while (hasMoreMessages && !targetMessage) {
-        console.log('AB')
-        const fetchOptions = { limit: 100 };
-        if (lastMessageId !== channel.id) {
-            console.log('AC')
-            fetchOptions[isBefore ? 'before' : 'after'] = lastMessageId;
+async function findAllMessagesByUser(channel, userId) {
+    // Collect all messages by the user in the channel. We'll paginate using 'before' to walk
+    // backwards through history, then sort the collected results by timestamp ascending.
+    let before = null;
+    const collected = [];
+    while (true) {
+        const options = { limit: 100 };
+        if (before) options.before = before;
+        const messages = await channel.messages.fetch(options).catch(() => null);
+        if (!messages || messages.size === 0) break;
+        for (const msg of messages.values()) {
+            if (msg.author.id === userId) collected.push(msg);
         }
-        let messages;
-        console.log('AD')
-        console.log(fetchOptions);
-        console.log(channel.id);
-        try {
-            messages = await channel.messages.fetch(fetchOptions);
-        } catch (error) {
-            console.log(error);
-            break;
-        }
-        console.log('AE')
-        if (messages.size < 100) {
-            console.log('AF')
-            console.log(messages.size);
-            hasMoreMessages = false;
-            break;
-        }
-        console.log('AG')
-        for (const [id, message] of messages) {
-            console.log('AH')
-            if (message.author.id === userId) {
-                console.log('AI')
-                targetMessage = message;
-                break;
-            }
-            console.log('AJ')
-            lastMessageId = id;
-        }
-        console.log('AK')
+        if (messages.size < 100) break;
+        const last = messages.last();
+        if (!last) break;
+        before = last.id;
     }
-    console.log('AL')
-    return targetMessage;
+    collected.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+    return collected;
 }
 
 /**
@@ -401,8 +400,7 @@ function createHelpMessage(extra = false) {
         .setTitle("!ntro Guide")
         .setDescription("### Commands\n" +
             "`!ntro help` - Show this help message\n" +
-            "`!ntro @user` - Get the intro message for the specified user\n" +
-            "- This also works with usernames and user IDs\n" +
+            "`!ntro [@user|userID|username]` - Get the intro message for the specified user\n" +
             "`!ntro me` - Get your own intro message\n" +
             "`!ntro update` - updates your cached intro message\n" +
             "`!ntro override [message link]` - Override your intro cache with a specific message link")
@@ -411,10 +409,8 @@ function createHelpMessage(extra = false) {
         embed.addFields(
             {
                 name: "ㅤ\nConfiguration Commands", value:
-                    "`!ntro config channel #channel`\n" +
-                    "`!ntro config add #channel`\n" +
-                    "`!ntro config set #channel`\n" +
-                    "- These are all the same. Sets the intro channel for this server. This also works with channel IDs.\n" +
+                    "`!ntro config channel [#channel|channelID]`\n" +
+                    "- Sets the intro channel for this server.\n" +
                     "\n" +
                     "`!ntro config mode [first|last|largest|smart]`\n" +
                     "- Set the intro selection mode for this server\n" +
@@ -456,7 +452,12 @@ async function clearGuildIntroCache(guildId) {
         writeBack = {}; // if the file doesn't exist or is empty
     }
     if (writeBack[guildId]) {
-        delete writeBack[guildId];
+        for (const userId in writeBack[guildId]) {
+            if (readOverridesForGuild(guildId).then(overrides => overrides.includes(userId))) {
+                continue;
+            }
+            delete writeBack[guildId][userId];
+        }
     }
     try {
         fs.writeFileSync('./intro-cache.json', JSON.stringify(writeBack, null, 2));
@@ -469,6 +470,7 @@ async function clearGuildIntroCache(guildId) {
  * @param {string} userId - the ID of the user
  */
 async function clearUserIntroCache(guildId, userId) {
+    if (!guildId || !userId) return;
     let writeBack;
     try {
         const save = fs.readFileSync("./intro-cache.json", 'utf8');
@@ -633,7 +635,9 @@ async function overrideCacheWithLink(guildId, userId, messageLink, message) {
 
     const msg = await channel.messages.fetch(messageId).catch(() => null);
     if (!msg) return message.channel.send({ embeds: [createSimpleEmbed('Message Not Found', 'Could not find the message from the provided message link.', 0xC72E2E)] });
-    if (msg.author.id !== userId) return message.channel.send({ embeds: [createSimpleEmbed('User Mismatch', 'The message author does not match the user.', 0xC72E2E)] });
+    if (msg.author.id !== userId) return message.channel.send({ embeds: [createSimpleEmbed('User Mismatch', 'This message does not belong to you.', 0xC72E2E)] });
+    if (msg.guild.id !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
+    if (msg.channel.id !== (await readGuildConfig(guildId))?.chId) return message.channel.send({ embeds: [createSimpleEmbed('Channel Mismatch', 'The message is not from the configured intro channel for this server.', 0xC72E2E)] });
 
     await overrideUserIntroCache(guildId, userId, messageId);
     await addGuildOverride(guildId, userId);
