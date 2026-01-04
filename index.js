@@ -134,7 +134,7 @@ client.on('messageCreate', async message => {
     return handleLookup();
 });
 
-client.login(process.env.ALPHA_TOKEN);
+client.login(process.env.DISCORD_TOKEN);
 
 //functions
 
