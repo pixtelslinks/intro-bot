@@ -36,6 +36,7 @@ client.on('messageCreate', async message => {
             const cfg = (await readGuildConfig(guildId)) || {};
             cfg.chId = channelId;
             await writeGuildConfig(guildId, cfg);
+            await clearGuildIntroCache(guildId);
             return send(createSimpleEmbed('Intro Channel Set', `Intro channel set to <#${channelId}> for this server.`));
         }
 
@@ -395,11 +396,20 @@ async function clearGuildIntroCache(guildId) {
         writeBack = {}; // if the file doesn't exist or is empty
     }
     if (writeBack[guildId]) {
-        for (const userId in writeBack[guildId]) {
-            if (readOverridesForGuild(guildId).then(overrides => overrides.includes(userId))) {
+        let overrides = [];
+        try {
+            overrides = await readOverridesForGuild(guildId);
+        } catch (err) {
+            overrides = [];
+        }
+        for (const userId of Object.keys(writeBack[guildId])) {
+            if (overrides.includes(userId)) {
                 continue;
             }
             delete writeBack[guildId][userId];
+        }
+        if (Object.keys(writeBack[guildId]).length === 0) {
+            delete writeBack[guildId];
         }
     }
     try {
