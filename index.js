@@ -12,6 +12,7 @@ client.on('messageCreate', async message => {
     if (message.author?.bot) return;
     const triggers = [`!ntro`, `!intro`, `<@!${client.user.id}>`, `<@${client.user.id}>`];
     if (!triggers.some(t => message.content.startsWith(t))) return;
+    message.channel.sendTyping();
 
     // normalize and parse args after the trigger
     const cleaned = message.content.replace(new RegExp(`^(${triggers.map(t => t.replace(/[.*+?^${}()|[\\]\\]/g, '\\\\$&')).join('|')})`), '').trim();
