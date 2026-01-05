@@ -297,6 +297,33 @@ async function readFromIntroCache(userId, guildID) {
     }
 }
 
+/** retrieves entire intro cache for a specific guild
+ * @param {string} guildId - the ID of the guild
+ * @return {object} - the intro cache object for the guild
+ */
+async function readGuildIntroCache(guildId) {
+    try {
+        const save = fs.readFileSync("./intro-cache.json", 'utf8');
+        const parsed = JSON.parse(save);
+        return parsed[guildId] || {};
+    } catch (err) {
+        return {};
+    }
+}
+
+/** retrieves entire intro cache
+ * @return {object} - the intro cache object
+ */
+async function readEntireIntroCache() {
+    try {
+        const save = fs.readFileSync("./intro-cache.json", 'utf8');
+        const parsed = JSON.parse(save);
+        return parsed;
+    } catch (err) {
+        return {};
+    }
+}
+
 /** clears the intro cache for a specific guild
  * @param {string} guildId - the ID of the guild
  */
