@@ -1,8 +1,9 @@
 require('dotenv').config();
 const fs = require('fs');
 const { Client, GatewayIntentBits, EmbedBuilder, SimpleContextFetchingStrategy } = require('discord.js');
-
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
+let guildLastUsed = {};
+let introCache = {};
 
 client.once('ready', () => {
     //console.log(`Logged in as ${client.user.tag}!`);
@@ -258,6 +259,7 @@ async function findAllMessagesByUser(channel, userId) {
  * @param {string} guildID - the ID of the guild
  */
 async function writeToIntroCache(userId, messageId, guildID) {
+    guildPriorityCheck(guildID);
     try {
         const overrides = await readOverridesForGuild(guildID);
         if (overrides && overrides.includes(userId)) {
@@ -283,17 +285,41 @@ async function writeToIntroCache(userId, messageId, guildID) {
     }
 }
 
+/** caches the entire intro cache for a specific guild
+ * @param {string} guildId - the ID of the guild
+ * @param {object} cache - the intro cache object to save
+ */
+async function writeGuildIntroCache(guildId, cache) {
+    let writeBack;
+    try {
+        const save = fs.readFileSync("./intro-cache.json", 'utf8');
+        writeBack = JSON.parse(save);
+    } catch (err) {
+        writeBack = {}; // if the file doesn't exist or is empty
+    }
+    writeBack[guildId] = cache;
+    try {
+        fs.writeFileSync('./intro-cache.json', JSON.stringify(writeBack, null, 2));
+    } catch (error) {
+    }
+}
+
 /** retrieves the cached intro message ID for a specific user
  * @param {string} userId - the ID of the user
  * @param {string} guildID - the ID of the guild
  */
 async function readFromIntroCache(userId, guildID) {
-    try {
-        const save = fs.readFileSync("./intro-cache.json", 'utf8');
-        const parsed = JSON.parse(save);
-        return parsed[guildID][userId];
-    } catch (err) {
-        return null;
+    guildPriorityCheck(guildID);
+    if (introCache[guildID] && introCache[guildID][userId]) {
+        return introCache[guildID][userId];
+    } else {
+        try {
+            const save = fs.readFileSync("./intro-cache.json", 'utf8');
+            const parsed = JSON.parse(save);
+            return parsed[guildID][userId];
+        } catch (err) {
+            return null;
+        }
     }
 }
 
@@ -302,12 +328,16 @@ async function readFromIntroCache(userId, guildID) {
  * @return {object} - the intro cache object for the guild
  */
 async function readGuildIntroCache(guildId) {
-    try {
-        const save = fs.readFileSync("./intro-cache.json", 'utf8');
-        const parsed = JSON.parse(save);
-        return parsed[guildId] || {};
-    } catch (err) {
-        return {};
+    if (introCache[guildId]) {
+        return introCache[guildId];
+    } else {
+        try {
+            const save = fs.readFileSync("./intro-cache.json", 'utf8');
+            const parsed = JSON.parse(save);
+            return parsed[guildId] || {};
+        } catch (err) {
+            return {};
+        }
     }
 }
 
@@ -328,6 +358,7 @@ async function readEntireIntroCache() {
  * @param {string} guildId - the ID of the guild
  */
 async function clearGuildIntroCache(guildId) {
+    guildPriorityCheck(guildId);
     let writeBack;
     try {
         const save = fs.readFileSync("./intro-cache.json", 'utf8');
@@ -363,6 +394,7 @@ async function clearGuildIntroCache(guildId) {
  * @param {string} userId - the ID of the user
  */
 async function clearUserIntroCache(guildId, userId) {
+    guildPriorityCheck(guildId);
     if (!guildId || !userId) return;
     let writeBack;
     try {
@@ -384,6 +416,7 @@ async function clearUserIntroCache(guildId, userId) {
  * @param {string} guildId - the ID of the guild
  */
 async function cacheAllGuildIntros(guildId) {
+    guildPriorityCheck(guildId);
     let guildConfig = await readGuildConfig(guildId);
     if (!guildConfig || !guildConfig.chId) {
         throw new Error('Intro channel not configured for this server.');
@@ -577,6 +610,25 @@ async function overrideCacheWithLink(guildId, userId, messageLink, message) {
     await overrideUserIntroCache(guildId, userId, messageId);
     await addGuildOverride(guildId, userId);
     return msg;
+}
+
+//===========================
+// memory management functions
+
+/** checks and manages guild priority in memory
+ * @param {string} guildId - the ID of the guild
+ */
+async function guildPriorityCheck(guildId) {
+    const now = Math.floor(Date.now() / 1000);
+    if (guildLastUsed[guildId]) {
+        if ((now - guildLastUsed[guildId]) < 300) { // 5 minutes
+            introCache[guildId] = await readGuildIntroCache(guildId);
+        } else if (introCache[guildId]) {
+            await writeGuildIntroCache(guildId, introCache[guildId] || {});
+            delete introCache[guildId];
+        }
+    }
+    guildLastUsed[guildId] = now
 }
 
 //===========================
