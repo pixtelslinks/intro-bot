@@ -24,34 +24,34 @@ client.on('messageCreate', async message => {
     const send = embed => message.channel.send({ embeds: [embed] });
 
     const handleConfig = async () => {
-        if (!isManage) return send(createSimpleEmbed('You do not have permission to configure for this server', 'This command requires the Manage Channels permission', 0xC72E2E));
+        if (!isManage) return send(createTemplateEmbed('error', ['You do not have permission to configure for this server', 'This command requires the Manage Channels permission']));
         const sub = (args[1] || '').toLowerCase();
         const guildId = message.guild.id;
         if (['channel', 'add', 'set'].includes(sub)) {
             if (!args[2]) {
                 const config = await readGuildConfig(guildId);
-                if (config?.chId) return send(createSimpleEmbed(`The current intro channel is <#${config.chId}>.`, 'Use `!ntro config add #channel` to choose a different intro channel'));
-                return send(createSimpleEmbed('Intro Channel Not Set', 'No intro channel has been set for this server yet. Use `!ntro config add #channel` to set one.'));
+                if (config?.chId) return send(createTemplateEmbed('error', [`The current intro channel is <#${config.chId}>.`, 'Use `!ntro config add #channel` to choose a different intro channel']));
+                return send(createTemplateEmbed('error', ['Intro Channel Not Set', 'No intro channel has been set for this server yet. Use `!ntro config add #channel` to set one.']));
             }
             const channelId = args[2].replace(/[<#>]/g, '');
-            if (!(await message.guild.channels.fetch(channelId).catch(() => null))) return send(createSimpleEmbed('Channel Not Found', `Could not find a channel with ID: ${channelId}`, 0xC72E2E));
+            if (!(await message.guild.channels.fetch(channelId).catch(() => null))) return send(createTemplateEmbed('error', ['Channel Not Found', `Could not find a channel with ID: ${channelId}`]));
             const cfg = (await readGuildConfig(guildId)) || {};
             cfg.chId = channelId;
             await writeGuildConfig(guildId, cfg);
             await clearGuildIntroCache(guildId);
-            return send(createSimpleEmbed('Intro Channel Set', `Intro channel set to <#${channelId}> for this server.`));
+            return send(createTemplateEmbed('simple', ['Intro Channel Set', `Intro channel set to <#${channelId}> for this server.`]));
         }
 
         if (sub === 'mode') {
             const mode = (args[2] || '').toLowerCase();
-            if (!mode) return send(createSimpleEmbed(`The current mode is \`${(await readGuildConfig(guildId))?.mode || 'not set'}\``, 'Use `!ntro config mode [first|last|largest|smart]` to change the mode'));
+            if (!mode) return send(createTemplateEmbed('simple', [`The current mode is \`${(await readGuildConfig(guildId))?.mode || 'not set'}\``, 'Use `!ntro config mode [first|last|largest|smart]` to change the mode']));
             if (!['first', 'last', 'largest', 'smart'].includes(mode)) return send(createHelpMessage(isManage));
             const cfg = (await readGuildConfig(guildId)) || {};
             cfg.mode = mode;
             await writeGuildConfig(guildId, cfg);
-            send(createSimpleEmbed('Intro Mode Set', `Intro selection mode set to **${mode}** for this server.`));
+            send(createTemplateEmbed('simple', ['Intro Mode Set', `Intro selection mode set to **${mode}** for this server.`]));
             await clearGuildIntroCache(guildId);
-            cacheAllGuildIntros(guildId).catch(err => send(createSimpleEmbed('Error Caching Intros', err.message, 0xC72E2E)));
+            cacheAllGuildIntros(guildId).catch(err => send(createTemplateEmbed('error', ['Error Caching Intros', err.message])));
             return;
         }
 
@@ -62,14 +62,14 @@ client.on('messageCreate', async message => {
         const sub = (args[1] || '').toLowerCase();
         const guildId = message.guild.id;
         if (sub === 'all') {
-            if (!isManage) return send(createSimpleEmbed('You do not have permission to update the intro cache for this server', 'This command requires the Manage Channels permission', 0xC72E2E));
+            if (!isManage) return send(createTemplateEmbed('error', ['You do not have permission to update the intro cache for this server', 'This command requires the Manage Channels permission']));
             await clearGuildIntroCache(guildId);
-            send(createSimpleEmbed('Updating Intro Cache', 'This may take a while depending on the number of intro messages.'));
+            send(createTemplateEmbed('simple', ['Updating Intro Cache', 'This may take a while depending on the number of intro messages.']));
             try {
                 await cacheAllGuildIntros(guildId);
-                return send(createSimpleEmbed('Intro Cache Updated', 'All intro messages have been cached.'));
+                return send(createTemplateEmbed('simple', ['Intro Cache Updated', 'All intro messages have been cached.']));
             } catch (err) {
-                return send(createSimpleEmbed('Error Caching Intros', err.message, 0xC72E2E));
+                return send(createTemplateEmbed('error', ['Error Caching Intros', err.message]));
             }
         }
 
@@ -78,26 +78,25 @@ client.on('messageCreate', async message => {
             await clearUserIntroCache(guildId, userId);
             const introMessage = await findIntro(guildId, userId, message);
             if (typeof introMessage === 'string') {
-                return send(createSimpleEmbed('Error', introMessage, 0xC72E2E));
+                return send(createTemplateEmbed('error', ['Error', introMessage]));
             }
-            if (!introMessage) return send(createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`));
+            if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
             await removeGuildOverride(guildId, userId);
-            const embed = createSimpleEmbed('Intro Updated', `Your intro has been updated: ${introMessage.url}`);
+            const embed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username), `Your intro has been updated: ${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null)]);
             embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!`, iconURL: client.user.displayAvatarURL() });
             return send(embed);
         }
 
         // update me (default)
         const overrides = await readOverridesForGuild(message.guildId);
-        if (overrides.includes(userId)) return send(createSimpleEmbed('Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.', 0xC72E2E));
+        if (overrides.includes(userId)) return send(createTemplateEmbed('error', ['Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.']));
         await clearUserIntroCache(guildId, userId);
         const introMessage = await findIntro(guildId, userId, message);
         if (typeof introMessage === 'string') {
-            return send(createSimpleEmbed('Error', introMessage, 0xC72E2E));
+            return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
-        if (!introMessage) return send(createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`));
-        const embed = createSimpleEmbed('Intro Updated', `Your intro has been updated: ${introMessage.url}`);
-        embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro override\` to search again!`, iconURL: client.user.displayAvatarURL() });
+        if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
+        const embed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated: ${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null)]);
         return send(embed);
     };
 
@@ -106,7 +105,7 @@ client.on('messageCreate', async message => {
         const userId = message.author.id;
         const guildId = message.guild.id;
         const overriddenMessage = await overrideCacheWithLink(guildId, userId, args[1], message);
-        if (overriddenMessage?.content) return send(createSimpleEmbed('Intro Cache Overridden', `Your intro cache has been overridden with the provided message: ${overriddenMessage.url}`));
+        if (overriddenMessage?.content) return send(createTemplateEmbed('simple', ['Intro Cache Overridden', `Your intro cache has been overridden with the provided message: ${overriddenMessage.url}`]));
     };
 
     const handleMe = async () => {
@@ -114,29 +113,28 @@ client.on('messageCreate', async message => {
         const guildId = message.guild.id;
         const introMessage = await findIntro(guildId, userId, message);
         if (typeof introMessage === 'string') {
-            return send(createSimpleEmbed('Error', introMessage, 0xC72E2E));
+            return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
-        if (!introMessage) return send(createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`));
-        const embed = createSimpleEmbed((introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url);
-        embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() });
+        if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
+        const embed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null)]);
         return send(embed);
     };
 
     const handleLookup = async () => {
         const identifier = args[0];
         const userId = await resolveUserId(identifier, message.guildId);
-        if (!userId) return send(createSimpleEmbed('User not found', `Could not find a user with: ${identifier}`, 0xC72E2E));
+        if (!userId) return send(createTemplateEmbed('error', ['User not found', `Could not find a user with: ${identifier}`]));
         try {
             await message.guild.members.fetch(userId);
         } catch (err) {
-            return send(createSimpleEmbed('User not found', `Could not find a user with: ${identifier}`, 0xC72E2E));
+            return send(createTemplateEmbed('error', ['User not found', `Could not find a user with: ${identifier}`]));
         }
         const introMessage = await findIntro(message.guild.id, userId, message);
         if (typeof introMessage === 'string') {
-            return send(createSimpleEmbed('Error', introMessage, 0xC72E2E));
+            return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
-        if (!introMessage) return send(createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`));
-        const embed = createSimpleEmbed((introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url);
+        if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
+        const embed = createTemplateEmbed('simple', [(introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url]);
         embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() });
         return send(embed);
     };
@@ -147,7 +145,7 @@ client.on('messageCreate', async message => {
     if (['update', 'refresh', 'recache'].includes(cmd)) return handleUpdate();
     if (cmd === 'override') return handleOverride();
     if (['me', 'my', 'mine', 'myself'].includes(cmd)) return handleMe();
-    if (cmd === 'uptime') return send(createSimpleEmbed('Uptime', `<t:${uptimestamp}>, <t:${uptimestamp}:R>.`));
+    if (cmd === 'uptime') return send(createTemplateEmbed('simple', ['Uptime', `<t:${uptimestamp}>, <t:${uptimestamp}:R>.`]));
     return handleLookup();
 });
 
@@ -596,18 +594,18 @@ async function readOverridesForGuild(guildId) {
 async function overrideCacheWithLink(guildId, userId, messageLink, message) {
     const regex = /^https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)(?:\/.*)?$/i;
     const regmsg = messageLink.match(regex);
-    if (!regmsg) return message.channel.send({ embeds: [createSimpleEmbed('Invalid Message Link', 'Please provide a valid Discord message link.', 0xC72E2E)] });
+    if (!regmsg) return message.channel.send({ embeds: [createTemplateEmbed('error', ['Invalid Message Link', 'Please provide a valid Discord message link.'])] });
     const [_, linkGuildId, channelId, messageId] = regmsg;
 
-    if (linkGuildId !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
+    if (linkGuildId !== guildId) return message.channel.send({ embeds: [createTemplateEmbed('error', ['Guild Mismatch', 'The message link provided is not from this server.'])] });
     const channel = await client.channels.fetch(channelId).catch(() => null);
-    if (!channel) return message.channel.send({ embeds: [createSimpleEmbed('Channel Not Found', 'Could not find the channel from the provided message link.', 0xC72E2E)] });
+    if (!channel) return message.channel.send({ embeds: [createTemplateEmbed('error', ['Channel Not Found', 'Could not find the channel from the provided message link.'])] });
 
     const msg = await channel.messages.fetch(messageId).catch(() => null);
-    if (!msg) return message.channel.send({ embeds: [createSimpleEmbed('Message Not Found', 'Could not find the message from the provided message link.', 0xC72E2E)] });
-    if (msg.author.id !== userId) return message.channel.send({ embeds: [createSimpleEmbed('User Mismatch', 'This message does not belong to you.', 0xC72E2E)] });
-    if (msg.guild.id !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
-    if (msg.channel.id !== (await readGuildConfig(guildId))?.chId) return message.channel.send({ embeds: [createSimpleEmbed('Channel Mismatch', 'The message is not from the configured intro channel for this server.', 0xC72E2E)] });
+    if (!msg) return message.channel.send({ embeds: [createTemplateEmbed('error', ['Message Not Found', 'Could not find the message from the provided message link.'])] });
+    if (msg.author.id !== userId) return message.channel.send({ embeds: [createTemplateEmbed('error', ['User Mismatch', 'This message does not belong to you.'])] });
+    if (msg.guild.id !== guildId) return message.channel.send({ embeds: [createTemplateEmbed('error', ['Guild Mismatch', 'The message link provided is not from this server.'])] });
+    if (msg.channel.id !== (await readGuildConfig(guildId))?.chId) return message.channel.send({ embeds: [createTemplateEmbed('error', ['Channel Mismatch', 'The message is not from the configured intro channel for this server.'])] });
 
     await overrideUserIntroCache(guildId, userId, messageId);
     await addGuildOverride(guildId, userId);
@@ -695,18 +693,32 @@ function createHelpMessage(extra = false) {
     return embed;
 }
 
-/** creates a simple single-line embed message
- * @param {string} title - the title of the embed
- * @param {string} description - the description of the embed
- * @param {number} [color=0x00AE86] - the color of the embed
+/** creates an embed with a template
+ * @param {string} type - embed template to use
+ * @param {string[]} text - text fields in order
  * @return {EmbedBuilder} - the created embed
  */
-function createSimpleEmbed(title, description, color = 0x00AE86) {
-    const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setDescription(description)
-        .setColor(color);
-    return embed;
+function createTemplateEmbed(type, text) {
+    if (type === 'simple') {
+        const embed = new EmbedBuilder()
+            .setTitle(text[0])
+            .setDescription(text[1])
+            .setColor(0x00AE86);
+        return embed;
+    } else if (type === 'error') {
+        const embed = new EmbedBuilder()
+            .setTitle(text[0])
+            .setDescription(text[1])
+            .setColor(0x00AE86);
+        return embed;
+    } else if (type === 'intro') {
+        const embed = new EmbedBuilder()
+            .setAuthor({ name: text[0], iconURL: text[2] })
+            .setDescription(text[1])
+            .setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() })
+            .setColor(0x00AE86);
+        return embed;
+    }
 }
 
 //===========================
