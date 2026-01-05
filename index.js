@@ -256,12 +256,12 @@ async function findAllMessagesByUser(channel, userId) {
  * caches the message ID of the intro message for a specific user as `userid: messageId`
  * @param {string} userId - the ID of the user
  * @param {string} messageId - the ID of the intro message
- * @param {string} guildID - the ID of the guild
+ * @param {string} guildId - the ID of the guild
  */
-async function writeToIntroCache(userId, messageId, guildID) {
-    guildPriorityCheck(guildID);
+async function writeToIntroCache(userId, messageId, guildId) {
+    guildPriorityCheck(guildId);
     try {
-        const overrides = await readOverridesForGuild(guildID);
+        const overrides = await readOverridesForGuild(guildId);
         if (overrides && overrides.includes(userId)) {
             return;
         }
@@ -275,10 +275,10 @@ async function writeToIntroCache(userId, messageId, guildID) {
     } catch (err) {
         writeBack = {}; // if the file doesn't exist or is empty
     }
-    if (!writeBack[guildID]) {
-        writeBack[guildID] = {};
+    if (!writeBack[guildId]) {
+        writeBack[guildId] = {};
     }
-    writeBack[guildID][userId] = messageId;
+    writeBack[guildId][userId] = messageId;
     try {
         fs.writeFileSync('./intro-cache.json', JSON.stringify(writeBack, null, 2));
     } catch (error) {
@@ -306,17 +306,17 @@ async function writeGuildIntroCache(guildId, cache) {
 
 /** retrieves the cached intro message ID for a specific user
  * @param {string} userId - the ID of the user
- * @param {string} guildID - the ID of the guild
+ * @param {string} guildId - the ID of the guild
  */
-async function readFromIntroCache(userId, guildID) {
-    guildPriorityCheck(guildID);
-    if (introCache[guildID] && introCache[guildID][userId]) {
-        return introCache[guildID][userId];
+async function readFromIntroCache(userId, guildId) {
+    guildPriorityCheck(guildId);
+    if (introCache[guildId] && introCache[guildId][userId]) {
+        return introCache[guildId][userId];
     } else {
         try {
             const save = fs.readFileSync("./intro-cache.json", 'utf8');
             const parsed = JSON.parse(save);
-            return parsed[guildID][userId];
+            return parsed[guildId][userId];
         } catch (err) {
             return null;
         }
