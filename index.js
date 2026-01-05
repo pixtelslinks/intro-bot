@@ -2,6 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const { Client, GatewayIntentBits, EmbedBuilder, SimpleContextFetchingStrategy } = require('discord.js');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
+const uptimestamp = Math.floor(Date.now() / 1000);
 let guildLastUsed = {};
 let introCache = {};
 
@@ -146,6 +147,7 @@ client.on('messageCreate', async message => {
     if (['update', 'refresh', 'recache'].includes(cmd)) return handleUpdate();
     if (cmd === 'override') return handleOverride();
     if (['me', 'my', 'mine', 'myself'].includes(cmd)) return handleMe();
+    if (cmd === 'uptime') return send(createSimpleEmbed('Uptime', `<t:${uptimestamp}>, <t:${uptimestamp}:R>.`));
     return handleLookup();
 });
 
