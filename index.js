@@ -150,7 +150,11 @@ client.on('messageCreate', async message => {
 
 client.login(process.env.DISCORD_TOKEN);
 
-//functions
+//===========================
+// functions
+
+//===========================
+// search functions
 
 /** finds the intro message for a specific user in a guild
  * @param {string} guildId - the ID of the guild
@@ -244,6 +248,9 @@ async function findAllMessagesByUser(channel, userId) {
     return collected;
 }
 
+//===========================
+// cache functions
+
 /**
  * caches the message ID of the intro message for a specific user as `userid: messageId`
  * @param {string} userId - the ID of the user
@@ -288,112 +295,6 @@ async function readFromIntroCache(userId, guildID) {
     } catch (err) {
         return null;
     }
-}
-
-/** writes a guild's configuration to configs.json
- * @param {string} guildId - the ID of the guild
- * @param {object} config - the configuration object to save
- */
-async function writeGuildConfig(guildId, config) {
-    let writeBack;
-    try {
-        const save = fs.readFileSync("./configs.json", 'utf8');
-        writeBack = JSON.parse(save);
-    } catch (err) {
-        writeBack = {}; // if the file doesn't exist or is empty
-    }
-    writeBack[guildId] = config;
-    try {
-        fs.writeFileSync('./configs.json', JSON.stringify(writeBack, null, 2));
-    } catch (error) {
-    }
-}
-
-/** retrieves a guild's configuration from configs.json
- * @param {string} guildId - the ID of the guild
- * @return {object|null} - the configuration object, or null if not found
- */
-async function readGuildConfig(guildId) {
-    try {
-        const save = fs.readFileSync("./configs.json", 'utf8');
-        const parsed = JSON.parse(save);
-        if (parsed[guildId].mode === undefined) {
-            parsed[guildId].mode = 'smart';
-        }
-        return parsed[guildId];
-    } catch (err) {
-        return null;
-    }
-}
-
-/** resolves a username, mention, or ID to a user ID
- * @param {string} identifier - the username, mention, or ID of the user
- * @param {string} guildid - the guild to search in
- * @return {Promise<string|null>} - the user ID, or null if not found
- */
-async function resolveUserId(identifier, guildid) {
-    const mentionMatch = identifier.match(/^<@!?(\d+)>$/);
-    if (mentionMatch) {
-        return mentionMatch[1];
-    }
-    if (/^\d+$/.test(identifier)) {
-        return identifier;
-    }
-    const members = await client.guilds.fetch(guildid).then(guild => guild.members.fetch({ query: identifier, limit: 100 }));
-    const member = members.find(m => m.user.username === identifier);
-    if (member) {
-        return member.user.id;
-    }
-    return null;
-}
-
-/** creates a help message embed 
- * @param {boolean} [extra=false] - whether to include extra information
- * @return {EmbedBuilder} - the help message embed
-*/
-function createHelpMessage(extra = false) {
-    const embed = new EmbedBuilder()
-        .setTitle("!ntro Guide")
-        .setDescription("### Commands\n" +
-            "`!ntro help` - Show this help message\n" +
-            "`!ntro [@user|userID|username]` - Get the intro message for the specified user\n" +
-            "`!ntro me` - Get your own intro message\n" +
-            "`!ntro update` - updates your cached intro message\n" +
-            "`!ntro override [message link]` - Override your intro cache with a specific message link")
-        .setColor(0x00AE86);
-    if (extra) {
-        embed.addFields(
-            {
-                name: "ㅤ\nConfiguration Commands", value:
-                    "`!ntro config channel [#channel|channelID]`\n" +
-                    "- Sets the intro channel for this server.\n" +
-                    "\n" +
-                    "`!ntro config mode [first|last|largest|smart]`\n" +
-                    "- Set the intro selection mode for this server\n" +
-                    "\nModes:\n" +
-                    "- `first`: Selects the first message sent by the user in the intro channel.\n" +
-                    "- `last`: Selects the last message sent by the user in the intro channel.\n" +
-                    "- `largest`: Selects the longest message sent by the user in the intro channel.\n" +
-                    "- `smart`: Selects a message longer than the average length of the user's messages in the intro channel, preferring more recent messages.\n" +
-                    "\n`!ntro update all` - Re-caches all intro messages for this server\n" +
-                    "- This may take a while depending on the number of intro messages."
-            });
-    }
-    return embed;
-}
-
-/** creates a simple single-line embed message
- * @param {string} title - the title of the embed
- * @param {string} description - the description of the embed
- * @param {number} [color=0x00AE86] - the color of the embed
- * @return {EmbedBuilder} - the created embed
- */
-function createSimpleEmbed(title, description, color = 0x00AE86) {
-    const embed = new EmbedBuilder()
-        .setTitle(title)
-        .setDescription(description)
-        .setColor(color);
-    return embed;
 }
 
 /** clears the intro cache for a specific guild
@@ -531,6 +432,77 @@ async function readOverridesForGuild(guildId) {
 }
 
 /**
+ * Overwrite a user's intro cache using a Discord message link and add the user to overrides.
+ * @param {string} guildId
+ * @param {string} userId
+ * @param {string} messageLink - must be a Discord message URL
+ * @param {Message} message - the original message that triggered the command
+ * @returns {Promise<Message>} the fetched message
+ */
+async function overrideCacheWithLink(guildId, userId, messageLink, message) {
+    const regex = /^https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)(?:\/.*)?$/i;
+    const regmsg = messageLink.match(regex);
+    if (!regmsg) return message.channel.send({ embeds: [createSimpleEmbed('Invalid Message Link', 'Please provide a valid Discord message link.', 0xC72E2E)] });
+    const [_, linkGuildId, channelId, messageId] = regmsg;
+
+    if (linkGuildId !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) return message.channel.send({ embeds: [createSimpleEmbed('Channel Not Found', 'Could not find the channel from the provided message link.', 0xC72E2E)] });
+
+    const msg = await channel.messages.fetch(messageId).catch(() => null);
+    if (!msg) return message.channel.send({ embeds: [createSimpleEmbed('Message Not Found', 'Could not find the message from the provided message link.', 0xC72E2E)] });
+    if (msg.author.id !== userId) return message.channel.send({ embeds: [createSimpleEmbed('User Mismatch', 'This message does not belong to you.', 0xC72E2E)] });
+    if (msg.guild.id !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
+    if (msg.channel.id !== (await readGuildConfig(guildId))?.chId) return message.channel.send({ embeds: [createSimpleEmbed('Channel Mismatch', 'The message is not from the configured intro channel for this server.', 0xC72E2E)] });
+
+    await overrideUserIntroCache(guildId, userId, messageId);
+    await addGuildOverride(guildId, userId);
+    return msg;
+}
+
+//===========================
+// config functions
+
+/** writes a guild's configuration to configs.json
+ * @param {string} guildId - the ID of the guild
+ * @param {object} config - the configuration object to save
+ */
+async function writeGuildConfig(guildId, config) {
+    let writeBack;
+    try {
+        const save = fs.readFileSync("./configs.json", 'utf8');
+        writeBack = JSON.parse(save);
+    } catch (err) {
+        writeBack = {}; // if the file doesn't exist or is empty
+    }
+    writeBack[guildId] = config;
+    try {
+        fs.writeFileSync('./configs.json', JSON.stringify(writeBack, null, 2));
+    } catch (error) {
+    }
+}
+
+/** retrieves a guild's configuration from configs.json
+ * @param {string} guildId - the ID of the guild
+ * @return {object|null} - the configuration object, or null if not found
+ */
+async function readGuildConfig(guildId) {
+    try {
+        const save = fs.readFileSync("./configs.json", 'utf8');
+        const parsed = JSON.parse(save);
+        if (parsed[guildId].mode === undefined) {
+            parsed[guildId].mode = 'smart';
+        }
+        return parsed[guildId];
+    } catch (err) {
+        return null;
+    }
+}
+
+//===========================
+// override functions
+
+/**
  * Adds a userId to the override list for a guild
  * @param {string} guildId
  * @param {string} userId
@@ -580,31 +552,80 @@ async function removeGuildOverride(guildId, userId) {
     }
 }
 
-/**
- * Overwrite a user's intro cache using a Discord message link and add the user to overrides.
- * @param {string} guildId
- * @param {string} userId
- * @param {string} messageLink - must be a Discord message URL
- * @param {Message} message - the original message that triggered the command
- * @returns {Promise<Message>} the fetched message
+//===========================
+// utility functions
+
+/** resolves a username, mention, or ID to a user ID
+ * @param {string} identifier - the username, mention, or ID of the user
+ * @param {string} guildid - the guild to search in
+ * @return {Promise<string|null>} - the user ID, or null if not found
  */
-async function overrideCacheWithLink(guildId, userId, messageLink, message) {
-    const regex = /^https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)(?:\/.*)?$/i;
-    const regmsg = messageLink.match(regex);
-    if (!regmsg) return message.channel.send({ embeds: [createSimpleEmbed('Invalid Message Link', 'Please provide a valid Discord message link.', 0xC72E2E)] });
-    const [_, linkGuildId, channelId, messageId] = regmsg;
-
-    if (linkGuildId !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
-    const channel = await client.channels.fetch(channelId).catch(() => null);
-    if (!channel) return message.channel.send({ embeds: [createSimpleEmbed('Channel Not Found', 'Could not find the channel from the provided message link.', 0xC72E2E)] });
-
-    const msg = await channel.messages.fetch(messageId).catch(() => null);
-    if (!msg) return message.channel.send({ embeds: [createSimpleEmbed('Message Not Found', 'Could not find the message from the provided message link.', 0xC72E2E)] });
-    if (msg.author.id !== userId) return message.channel.send({ embeds: [createSimpleEmbed('User Mismatch', 'This message does not belong to you.', 0xC72E2E)] });
-    if (msg.guild.id !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
-    if (msg.channel.id !== (await readGuildConfig(guildId))?.chId) return message.channel.send({ embeds: [createSimpleEmbed('Channel Mismatch', 'The message is not from the configured intro channel for this server.', 0xC72E2E)] });
-
-    await overrideUserIntroCache(guildId, userId, messageId);
-    await addGuildOverride(guildId, userId);
-    return msg;
+async function resolveUserId(identifier, guildid) {
+    const mentionMatch = identifier.match(/^<@!?(\d+)>$/);
+    if (mentionMatch) {
+        return mentionMatch[1];
+    }
+    if (/^\d+$/.test(identifier)) {
+        return identifier;
+    }
+    const members = await client.guilds.fetch(guildid).then(guild => guild.members.fetch({ query: identifier, limit: 100 }));
+    const member = members.find(m => m.user.username === identifier);
+    if (member) {
+        return member.user.id;
+    }
+    return null;
 }
+
+//===========================
+// embed functions
+
+/** creates a help message embed 
+ * @param {boolean} [extra=false] - whether to include extra information
+ * @return {EmbedBuilder} - the help message embed
+*/
+function createHelpMessage(extra = false) {
+    const embed = new EmbedBuilder()
+        .setTitle("!ntro Guide")
+        .setDescription("### Commands\n" +
+            "`!ntro help` - Show this help message\n" +
+            "`!ntro [@user|userID|username]` - Get the intro message for the specified user\n" +
+            "`!ntro me` - Get your own intro message\n" +
+            "`!ntro update` - updates your cached intro message\n" +
+            "`!ntro override [message link]` - Override your intro cache with a specific message link")
+        .setColor(0x00AE86);
+    if (extra) {
+        embed.addFields(
+            {
+                name: "ㅤ\nConfiguration Commands", value:
+                    "`!ntro config channel [#channel|channelID]`\n" +
+                    "- Sets the intro channel for this server.\n" +
+                    "\n" +
+                    "`!ntro config mode [first|last|largest|smart]`\n" +
+                    "- Set the intro selection mode for this server\n" +
+                    "\nModes:\n" +
+                    "- `first`: Selects the first message sent by the user in the intro channel.\n" +
+                    "- `last`: Selects the last message sent by the user in the intro channel.\n" +
+                    "- `largest`: Selects the longest message sent by the user in the intro channel.\n" +
+                    "- `smart`: Selects a message longer than the average length of the user's messages in the intro channel, preferring more recent messages.\n" +
+                    "\n`!ntro update all` - Re-caches all intro messages for this server\n" +
+                    "- This may take a while depending on the number of intro messages."
+            });
+    }
+    return embed;
+}
+
+/** creates a simple single-line embed message
+ * @param {string} title - the title of the embed
+ * @param {string} description - the description of the embed
+ * @param {number} [color=0x00AE86] - the color of the embed
+ * @return {EmbedBuilder} - the created embed
+ */
+function createSimpleEmbed(title, description, color = 0x00AE86) {
+    const embed = new EmbedBuilder()
+        .setTitle(title)
+        .setDescription(description)
+        .setColor(color);
+    return embed;
+}
+
+//===========================
