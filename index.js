@@ -407,59 +407,6 @@ async function cacheAllGuildIntros(guildId) {
     }
 }
 
-/** overrides the cache for a specific user in a specific guild
- * @param {string} guildId - the ID of the guild
- * @param {string} userId - the ID of the user
- * @param {string} message - the message ID to cache
- */
-async function overrideUserIntroCache(guildId, userId, messageId) {
-    await writeToIntroCache(userId, messageId, guildId);
-}
-
-/**
- * Retrieves override user IDs for a guild from overrides.json
- * @param {string} guildId
- * @returns {Promise<string[]>}
- */
-async function readOverridesForGuild(guildId) {
-    try {
-        const save = fs.readFileSync('./overrides.json', 'utf8');
-        const parsed = JSON.parse(save);
-        return parsed[guildId] || [];
-    } catch (err) {
-        return [];
-    }
-}
-
-/**
- * Overwrite a user's intro cache using a Discord message link and add the user to overrides.
- * @param {string} guildId
- * @param {string} userId
- * @param {string} messageLink - must be a Discord message URL
- * @param {Message} message - the original message that triggered the command
- * @returns {Promise<Message>} the fetched message
- */
-async function overrideCacheWithLink(guildId, userId, messageLink, message) {
-    const regex = /^https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)(?:\/.*)?$/i;
-    const regmsg = messageLink.match(regex);
-    if (!regmsg) return message.channel.send({ embeds: [createSimpleEmbed('Invalid Message Link', 'Please provide a valid Discord message link.', 0xC72E2E)] });
-    const [_, linkGuildId, channelId, messageId] = regmsg;
-
-    if (linkGuildId !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
-    const channel = await client.channels.fetch(channelId).catch(() => null);
-    if (!channel) return message.channel.send({ embeds: [createSimpleEmbed('Channel Not Found', 'Could not find the channel from the provided message link.', 0xC72E2E)] });
-
-    const msg = await channel.messages.fetch(messageId).catch(() => null);
-    if (!msg) return message.channel.send({ embeds: [createSimpleEmbed('Message Not Found', 'Could not find the message from the provided message link.', 0xC72E2E)] });
-    if (msg.author.id !== userId) return message.channel.send({ embeds: [createSimpleEmbed('User Mismatch', 'This message does not belong to you.', 0xC72E2E)] });
-    if (msg.guild.id !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
-    if (msg.channel.id !== (await readGuildConfig(guildId))?.chId) return message.channel.send({ embeds: [createSimpleEmbed('Channel Mismatch', 'The message is not from the configured intro channel for this server.', 0xC72E2E)] });
-
-    await overrideUserIntroCache(guildId, userId, messageId);
-    await addGuildOverride(guildId, userId);
-    return msg;
-}
-
 //===========================
 // config functions
 
@@ -550,6 +497,59 @@ async function removeGuildOverride(guildId, userId) {
             // ignore write errors
         }
     }
+}
+
+/** overrides the cache for a specific user in a specific guild
+ * @param {string} guildId - the ID of the guild
+ * @param {string} userId - the ID of the user
+ * @param {string} message - the message ID to cache
+ */
+async function overrideUserIntroCache(guildId, userId, messageId) {
+    await writeToIntroCache(userId, messageId, guildId);
+}
+
+/**
+ * Retrieves override user IDs for a guild from overrides.json
+ * @param {string} guildId
+ * @returns {Promise<string[]>}
+ */
+async function readOverridesForGuild(guildId) {
+    try {
+        const save = fs.readFileSync('./overrides.json', 'utf8');
+        const parsed = JSON.parse(save);
+        return parsed[guildId] || [];
+    } catch (err) {
+        return [];
+    }
+}
+
+/**
+ * Overwrite a user's intro cache using a Discord message link and add the user to overrides.
+ * @param {string} guildId
+ * @param {string} userId
+ * @param {string} messageLink - must be a Discord message URL
+ * @param {Message} message - the original message that triggered the command
+ * @returns {Promise<Message>} the fetched message
+ */
+async function overrideCacheWithLink(guildId, userId, messageLink, message) {
+    const regex = /^https?:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)(?:\/.*)?$/i;
+    const regmsg = messageLink.match(regex);
+    if (!regmsg) return message.channel.send({ embeds: [createSimpleEmbed('Invalid Message Link', 'Please provide a valid Discord message link.', 0xC72E2E)] });
+    const [_, linkGuildId, channelId, messageId] = regmsg;
+
+    if (linkGuildId !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
+    const channel = await client.channels.fetch(channelId).catch(() => null);
+    if (!channel) return message.channel.send({ embeds: [createSimpleEmbed('Channel Not Found', 'Could not find the channel from the provided message link.', 0xC72E2E)] });
+
+    const msg = await channel.messages.fetch(messageId).catch(() => null);
+    if (!msg) return message.channel.send({ embeds: [createSimpleEmbed('Message Not Found', 'Could not find the message from the provided message link.', 0xC72E2E)] });
+    if (msg.author.id !== userId) return message.channel.send({ embeds: [createSimpleEmbed('User Mismatch', 'This message does not belong to you.', 0xC72E2E)] });
+    if (msg.guild.id !== guildId) return message.channel.send({ embeds: [createSimpleEmbed('Guild Mismatch', 'The message link provided is not from this server.', 0xC72E2E)] });
+    if (msg.channel.id !== (await readGuildConfig(guildId))?.chId) return message.channel.send({ embeds: [createSimpleEmbed('Channel Mismatch', 'The message is not from the configured intro channel for this server.', 0xC72E2E)] });
+
+    await overrideUserIntroCache(guildId, userId, messageId);
+    await addGuildOverride(guildId, userId);
+    return msg;
 }
 
 //===========================
