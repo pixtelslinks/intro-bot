@@ -270,7 +270,6 @@ async function writeToIntroCache(userId, messageId, guildID) {
         writeBack[guildID] = {};
     }
     writeBack[guildID][userId] = messageId;
-    console.log("Writing to intro cache: ", writeBack);
     try {
         fs.writeFileSync('./intro-cache.json', JSON.stringify(writeBack, null, 2));
     } catch (error) {
