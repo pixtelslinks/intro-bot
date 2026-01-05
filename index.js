@@ -183,7 +183,7 @@ async function findIntro(guildId, userId, message) {
     } else if (guildConfig.mode === 'largest') {
         const allMessages = await findAllMessagesByUser(introChannel, userId);
         introMessage = allMessages.reduce((max, msg) => msg.content.length > max.content.length ? msg : max, allMessages[0]);
-    } else { // smart mode
+    } else if (guildConfig.mode === 'smart' || !guildConfig.mode) { // smart mode
         const allMessages = await findAllMessagesByUser(introChannel, userId);
         const avgLength = (allMessages.reduce((sum, msg) => sum + msg.content.length, 0) / allMessages.length) - 1;
         const longerThanAvg = allMessages.filter(msg => msg.content.length > avgLength);
@@ -318,6 +318,9 @@ async function readGuildConfig(guildId) {
     try {
         const save = fs.readFileSync("./configs.json", 'utf8');
         const parsed = JSON.parse(save);
+        if (parsed[guildId].mode === undefined) {
+            parsed[guildId].mode = 'smart';
+        }
         return parsed[guildId];
     } catch (err) {
         return null;
@@ -480,7 +483,7 @@ async function cacheAllGuildIntros(guildId) {
         if (!msgs || msgs.length === 0) continue;
 
         let selected = null;
-        const mode = guildConfig.mode || 'first';
+        const mode = guildConfig.mode;
 
         if (mode === 'first') {
             selected = msgs.reduce((a, b) => (a.createdTimestamp < b.createdTimestamp ? a : b), msgs[0]);
@@ -488,7 +491,7 @@ async function cacheAllGuildIntros(guildId) {
             selected = msgs.reduce((a, b) => (a.createdTimestamp > b.createdTimestamp ? a : b), msgs[0]);
         } else if (mode === 'largest') {
             selected = msgs.reduce((a, b) => ((a.content ? a.content.length : 0) > (b.content ? b.content.length : 0) ? a : b), msgs[0]);
-        } else { // smart mode
+        } else if (mode === 'smart' || !mode) { // smart mode
             const lengths = msgs.map(m => (m.content ? m.content.length : 0));
             const avg = lengths.reduce((s, l) => s + l, 0) / lengths.length;
             const longer = msgs.filter(m => (m.content ? m.content.length : 0) > avg);
