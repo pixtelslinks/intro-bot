@@ -75,6 +75,9 @@ client.on('messageCreate', async message => {
         if (['force', 'override', 'reset'].includes(sub)) {
             await clearUserIntroCache(guildId, userId);
             const introMessage = await findIntro(guildId, userId, message);
+            if (typeof introMessage === 'string') {
+                return send(createSimpleEmbed('Error', introMessage, 0xC72E2E));
+            }
             if (!introMessage) return send(createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`));
             await removeGuildOverride(guildId, userId);
             const embed = createSimpleEmbed('Intro Updated', `Your intro has been updated: ${introMessage.url}`);
@@ -87,6 +90,9 @@ client.on('messageCreate', async message => {
         if (overrides.includes(userId)) return send(createSimpleEmbed('Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.', 0xC72E2E));
         await clearUserIntroCache(guildId, userId);
         const introMessage = await findIntro(guildId, userId, message);
+        if (typeof introMessage === 'string') {
+            return send(createSimpleEmbed('Error', introMessage, 0xC72E2E));
+        }
         if (!introMessage) return send(createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`));
         const embed = createSimpleEmbed('Intro Updated', `Your intro has been updated: ${introMessage.url}`);
         embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro override\` to search again!`, iconURL: client.user.displayAvatarURL() });
@@ -105,6 +111,9 @@ client.on('messageCreate', async message => {
         const userId = message.author.id;
         const guildId = message.guild.id;
         const introMessage = await findIntro(guildId, userId, message);
+        if (typeof introMessage === 'string') {
+            return send(createSimpleEmbed('Error', introMessage, 0xC72E2E));
+        }
         if (!introMessage) return send(createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`));
         const embed = createSimpleEmbed((introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url);
         embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() });
@@ -121,6 +130,9 @@ client.on('messageCreate', async message => {
             return send(createSimpleEmbed('User not found', `Could not find a user with: ${identifier}`, 0xC72E2E));
         }
         const introMessage = await findIntro(message.guild.id, userId, message);
+        if (typeof introMessage === 'string') {
+            return send(createSimpleEmbed('Error', introMessage, 0xC72E2E));
+        }
         if (!introMessage) return send(createSimpleEmbed('Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`));
         const embed = createSimpleEmbed((introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url);
         embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() });
@@ -150,9 +162,7 @@ async function findIntro(guildId, userId, message) {
     // check cache first
     let cachedMessageId = await readFromIntroCache(userId, guildId);
     let guildConfig = await readGuildConfig(guildId);
-    if (!guildConfig || !guildConfig.chId) {
-        throw new Error('Intro channel not configured for this server.');
-    }
+    if (!guildConfig || !guildConfig.chId) return 'No intro channel configured for this server.';
     // fetch message from discord if cached
     const introChannel = await message.guild.channels.fetch(guildConfig.chId);
     if (cachedMessageId) {
