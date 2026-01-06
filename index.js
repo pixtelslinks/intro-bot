@@ -118,6 +118,19 @@ client.on('messageCreate', async message => {
 
     const handleLookup = async () => {
         const identifier = args[0];
+        if (['first', 'last', 'largest', 'smart', 'channel', 'add', 'set', 'mode', 'update', 'override', 'force', 'reset', '#'].includes(identifier.toLowerCase())) {
+            if (identifier === 'mode') {
+                return send(createTemplateEmbed('error', ['Did you mean `!ntro config mode`?', 'Use `!ntro help` to see available commands.']));
+            } else if (['channel', 'add', 'set'].includes(identifier.toLowerCase())) {
+                return send(createTemplateEmbed('error', ['Did you mean `!ntro config channel`?', 'Use `!ntro help` to see available commands.']));
+            } else if (['force', 'reset'].includes(identifier.toLowerCase())) {
+                return send(createTemplateEmbed('error', ['Did you mean `!ntro update force`?', 'Use `!ntro help` to see available commands.']));
+            } else if (['first', 'last', 'largest', 'smart'].includes(identifier.toLowerCase())) {
+                return send(createTemplateEmbed('error', [`Did you mean \`!ntro config mode ${identifier.toLowerCase()}\`?`, 'Use `!ntro help` to see available commands.']));
+            } else if (['<#', '#'].includes(identifier.toLowerCase())) {
+                return send(createTemplateEmbed('error', ['Did you mean `!ntro config channel`?', 'Use `!ntro help` to see available commands.']));
+            }
+        }
         const userId = await resolveUserId(identifier, message.guildId);
         if (!userId) return send(createTemplateEmbed('error', ['User not found', `Could not find a user with: ${identifier}`]));
         try {
