@@ -82,9 +82,7 @@ client.on('messageCreate', async message => {
             }
             if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
             await removeGuildOverride(guildId, userId);
-            const embed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username), `Your intro has been updated: ${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null)]);
-            embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!`, iconURL: client.user.displayAvatarURL() });
-            return send(embed);
+            return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!']));
         }
 
         // update me (default)
@@ -96,8 +94,7 @@ client.on('messageCreate', async message => {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
         if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-        const embed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated: ${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null)]);
-        return send(embed);
+        return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!']));
     };
 
     const handleOverride = async () => {
@@ -116,8 +113,7 @@ client.on('messageCreate', async message => {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
         if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-        const embed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null)]);
-        return send(embed);
+        return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro update\` to search again!']));
     };
 
     const handleLookup = async () => {
@@ -134,9 +130,7 @@ client.on('messageCreate', async message => {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
         if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-        const embed = createTemplateEmbed('simple', [(introMessage.author.globalName || introMessage.author.username) + "'s Intro", introMessage.url]);
-        embed.setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() });
-        return send(embed);
+        return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro update\` to search again!']));
     };
 
     // dispatch
@@ -714,8 +708,8 @@ function createTemplateEmbed(type, text) {
     } else if (type === 'intro') {
         const embed = new EmbedBuilder()
             .setAuthor({ name: text[0], iconURL: text[2] })
-            .setDescription(text[1])
-            .setFooter({ text: `Did I get this intro wrong?\nTry \`!ntro update\` to search again!`, iconURL: client.user.displayAvatarURL() })
+            .setTitle(text[1])
+            .setFooter({ text: text[3], iconURL: client.user.displayAvatarURL() })
             .setColor(0x00AE86);
         return embed;
     }
