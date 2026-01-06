@@ -716,7 +716,7 @@ function createTemplateEmbed(type, text) {
         const embed = new EmbedBuilder()
             .setTitle(text[0])
             .setDescription(text[1])
-            .setColor(0x00AE86);
+            .setColor(0xFF7B72);
         return embed;
     } else if (type === 'intro') {
         const embed = new EmbedBuilder()
