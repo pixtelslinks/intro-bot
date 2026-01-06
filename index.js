@@ -6,6 +6,11 @@ const uptimestamp = Math.floor(Date.now() / 1000);
 let guildLastUsed = {};
 let introCache = {};
 
+// colors
+const COLOR_SIMPLE = 0x5ECEB6;
+const COLOR_INFO = 0x85A6FF;
+const COLOR_ERROR = 0xFF5C5C;
+
 client.once('ready', () => {
     //console.log(`Logged in as ${client.user.tag}!`);
 });
@@ -30,11 +35,20 @@ client.on('messageCreate', async message => {
         if (['channel', 'add', 'set'].includes(sub)) {
             if (!args[2]) {
                 const config = await readGuildConfig(guildId);
-                if (config?.chId) return send(createTemplateEmbed('error', [`The current intro channel is <#${config.chId}>.`, 'Use `!ntro config add #channel` to choose a different intro channel']));
-                return send(createTemplateEmbed('error', ['Intro Channel Not Set', 'No intro channel has been set for this server yet. Use `!ntro config add #channel` to set one.']));
+                if (config?.chId) {
+                    send(createTemplateEmbed('one-line', `The current intro channel is <#${config.chId}>`));
+                    return send(createDetailedHelpMessage('config channel', message));
+                }
+                send(createTemplateEmbed('warning', 'Intro Channel Not Set'));
+                return send(createDetailedHelpMessage('config channel', message));
+            } else if (args[2].toLowerCase() === 'help') {
+                return send(createDetailedHelpMessage('config channel', message));
             }
             const channelId = args[2].replace(/[<#>]/g, '');
-            if (!(await message.guild.channels.fetch(channelId).catch(() => null))) return send(createTemplateEmbed('error', ['Channel Not Found', `Could not find a channel with ID: ${channelId}`]));
+            if (!(await message.guild.channels.fetch(channelId).catch(() => null))) {
+                send(createTemplateEmbed('error', ['Channel Not Found', `Could not find a channel with ID: ${channelId}`]));
+                return send(createDetailedHelpMessage('config channel', message));
+            }
             const cfg = (await readGuildConfig(guildId)) || {};
             cfg.chId = channelId;
             await writeGuildConfig(guildId, cfg);
@@ -44,8 +58,11 @@ client.on('messageCreate', async message => {
 
         if (sub === 'mode') {
             const mode = (args[2] || '').toLowerCase();
-            if (!mode) return send(createTemplateEmbed('simple', [`The current mode is \`${(await readGuildConfig(guildId))?.mode || 'not set'}\``, 'Use `!ntro config mode [first|last|largest|smart]` to change the mode']));
-            if (!['first', 'last', 'largest', 'smart'].includes(mode)) return send(createHelpMessage(isManage));
+            if (!mode) {
+                send(createTemplateEmbed('one-line', `The current mode is **${(await readGuildConfig(guildId))?.mode || 'not set'}**`));
+                return send(createDetailedHelpMessage('config mode', message));
+            }
+            if (!['first', 'last', 'largest', 'smart'].includes(mode)) return send(createDetailedHelpMessage('config mode', message));
             const cfg = (await readGuildConfig(guildId)) || {};
             cfg.mode = mode;
             await writeGuildConfig(guildId, cfg);
@@ -55,7 +72,7 @@ client.on('messageCreate', async message => {
             return;
         }
 
-        return send(createHelpMessage(isManage));
+        return send(createDetailedHelpMessage('config', message));
     };
 
     const handleUpdate = async () => {
@@ -93,12 +110,12 @@ client.on('messageCreate', async message => {
         if (typeof introMessage === 'string') {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
-        if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
+        if (!introMessage) return send(createTemplateEmbed('simple', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.globalName || message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
         return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!']));
     };
 
     const handleOverride = async () => {
-        if (!args[1]) return send(createHelpMessage(isManage));
+        if (!args[1]) return send(createDetailedHelpMessage('override', message));
         const userId = message.author.id;
         const guildId = message.guild.id;
         const overriddenMessage = await overrideCacheWithLink(guildId, userId, args[1], message);
@@ -112,7 +129,7 @@ client.on('messageCreate', async message => {
         if (typeof introMessage === 'string') {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
-        if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
+        if (!introMessage) return send(createTemplateEmbed('simple', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.globalName || message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
         return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro update\` to search again!']));
     };
 
@@ -142,7 +159,7 @@ client.on('messageCreate', async message => {
         if (typeof introMessage === 'string') {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
-        if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
+        if (!introMessage) return send(createTemplateEmbed('simple', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.globalName || message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
         return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro update\` to search again!']));
     };
 
@@ -678,7 +695,7 @@ function createHelpMessage(extra = false) {
             "`!ntro me` - Get your own intro message\n" +
             "`!ntro update` - updates your cached intro message\n" +
             "`!ntro override [message link]` - Override your intro cache with a specific message link")
-        .setColor(0x00AE86);
+        .setColor(COLOR_INFO);
     if (extra) {
         embed.addFields(
             {
@@ -700,6 +717,63 @@ function createHelpMessage(extra = false) {
     return embed;
 }
 
+/** creates more detailed help messages based on topic
+ * @param {string} topic - the help topic
+ * @param {Message} message - the original message that triggered the command
+ * @return {EmbedBuilder} - the help message embed
+ */
+function createDetailedHelpMessage(topic, message) {
+    const embed = new EmbedBuilder().setColor(COLOR_INFO);
+    if (topic === 'config') {
+        embed.setTitle('Configuring !ntro')
+            .setDescription('Commands to configure the !ntro for this server.')
+            .addFields(
+                { name: 'Channels', value: 'Use `!ntro config channel [#channel|channelID]` to set or view the intro channel for this server.' },
+                { name: 'Modes', value: 'Use `!ntro config mode [first|last|largest|smart]` to set how the intro message is selected.' },
+                { name: 'Example', value: `!ntro config channel <#${message.channel.id || 'channelId'}>\n!ntro config mode largest` }
+            );
+        return embed;
+    }
+    if (topic === 'config channel') {
+        embed.setTitle('Configuring Intro Channel')
+            .setDescription('Set or view the intro channel for this server.')
+            .addFields(
+                { name: 'To set', value: 'Provide a channel mention or ID. Otherwise, the current intro channel will be shown.' },
+                { name: 'Example', value: `!ntro config channel <#${message?.channel?.id || 'channelId'}>` }
+            );
+        return embed;
+    }
+    if (topic === 'config mode') {
+        embed.setTitle('Configuring Intro Mode')
+            .setDescription("Choose how a user's intro message is selected from the intro channel.")
+            .addFields(
+                { name: 'Available modes', value: '- `first` — first message by the user\n- `last` — last message by the user\n- `largest` — longest message by the user\n- `smart` — message longer than the user\'s average, preferring recent ones' },
+                { name: 'Example', value: '!ntro config mode largest' }
+            );
+        return embed;
+    }
+    if (topic === 'update all') {
+        embed.setTitle('Updating All Intros')
+            .setDescription('Re-cache all intro messages for this server. This may take time depending on message volume.')
+            .addFields(
+                { name: 'Requires', value: 'Manage Channels permission' },
+                { name: 'Example', value: '!ntro update all' }
+            );
+        return embed;
+    }
+    if (topic === 'override') {
+        embed.setTitle('Overriding Intro Cache')
+            .setDescription("Manually select your intro message if !ntro didn't get it right.")
+            .addFields(
+                { name: 'Requirements', value: 'The message must be from the configured intro channel and belong to you. Overriding adds you to the override list so your intro won\'t be auto-updated.' },
+                { name: 'To use', value: 'Provide a valid Discord message link. To get the link, right-click or long-press your intro message and select "Copy Message Link".' },
+                { name: 'Example', value: message && message.url ? `!ntro override ${message.url}` : '!ntro override <message link>' }
+            );
+        return embed;
+    }
+    return embed.setTitle('Help');
+}
+
 /** creates an embed with a template
  * @param {string} type - embed template to use
  * @param {string[]} text - text fields in order
@@ -710,20 +784,36 @@ function createTemplateEmbed(type, text) {
         const embed = new EmbedBuilder()
             .setTitle(text[0])
             .setDescription(text[1])
-            .setColor(0x00AE86);
+            .setColor(COLOR_SIMPLE);
         return embed;
     } else if (type === 'error') {
         const embed = new EmbedBuilder()
             .setTitle(text[0])
             .setDescription(text[1])
-            .setColor(0xFF7B72);
+            .setColor(COLOR_ERROR);
         return embed;
     } else if (type === 'intro') {
         const embed = new EmbedBuilder()
             .setAuthor({ name: text[0], iconURL: text[2] })
             .setTitle(text[1])
-            .setFooter({ text: text[3], iconURL: client.user.displayAvatarURL() })
-            .setColor(0x00AE86);
+            .setFooter({ text: text[3] })//, iconURL: client.user.displayAvatarURL() })
+            .setColor(COLOR_SIMPLE);
+        return embed;
+    } else if (type === 'info') {
+        const embed = new EmbedBuilder()
+            .setTitle(text[0])
+            .setDescription(text[1])
+            .setColor(COLOR_INFO);
+        return embed;
+    } else if (type === 'one-line') {
+        const embed = new EmbedBuilder()
+            .setTitle(text || text[0])
+            .setColor(COLOR_SIMPLE);
+        return embed;
+    } else if (type === 'warning') {
+        const embed = new EmbedBuilder()
+            .setTitle(text || text[0])
+            .setColor(COLOR_ERROR);
         return embed;
     }
 }
