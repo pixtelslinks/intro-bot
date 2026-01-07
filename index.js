@@ -1,6 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const { Client, GatewayIntentBits, EmbedBuilder, SimpleContextFetchingStrategy } = require('discord.js');
+const { clear } = require('console');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
 const uptimestamp = Math.floor(Date.now() / 1000);
 let guildLastUsed = {};
@@ -92,13 +93,14 @@ client.on('messageCreate', async message => {
 
         const userId = message.author.id;
         if (['force', 'override', 'reset'].includes(sub)) {
+            await removeGuildOverride(guildId, userId);
             await clearUserIntroCache(guildId, userId);
             const introMessage = await findIntro(guildId, userId, message);
+            await writeToIntroCache(userId, introMessage ? introMessage.id : null, guildId);
             if (typeof introMessage === 'string') {
                 return send(createTemplateEmbed('error', ['Error', introMessage]));
             }
             if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-            await removeGuildOverride(guildId, userId);
             return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!']));
         }
 
@@ -107,6 +109,7 @@ client.on('messageCreate', async message => {
         if (overrides.includes(userId)) return send(createTemplateEmbed('error', ['Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.']));
         await clearUserIntroCache(guildId, userId);
         const introMessage = await findIntro(guildId, userId, message);
+        await writeToIntroCache(userId, introMessage ? introMessage.id : null, guildId);
         if (typeof introMessage === 'string') {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
@@ -170,6 +173,8 @@ client.on('messageCreate', async message => {
     if (cmd === 'override') return handleOverride();
     if (['me', 'my', 'mine', 'myself'].includes(cmd)) return handleMe();
     if (cmd === 'uptime') return send(createTemplateEmbed('simple', ['Uptime', `<t:${uptimestamp}>, <t:${uptimestamp}:R>.`]));
+    //temp
+    if (cmd === 'clearmem') return clearMemoryCache().then(() => send(createTemplateEmbed('simple', ['Memory Cache Cleared', 'All guild intro caches have been written to disk and cleared from memory.'])));
     return handleLookup();
 });
 
@@ -281,8 +286,9 @@ async function findAllMessagesByUser(channel, userId) {
  * @param {string} userId - the ID of the user
  * @param {string} messageId - the ID of the intro message
  * @param {string} guildId - the ID of the guild
+ * @param {boolean} force - if true, forces writing to disk even if memory cache exists
  */
-async function writeToIntroCache(userId, messageId, guildId) {
+async function writeToIntroCache(userId, messageId, guildId, force = false) {
     guildPriorityCheck(guildId);
     try {
         const overrides = await readOverridesForGuild(guildId);
@@ -291,7 +297,10 @@ async function writeToIntroCache(userId, messageId, guildId) {
         }
     } catch (err) {
     }
-
+    if (introCache[guildId] && !force) {
+        introCache[guildId][userId] = messageId;
+        return;
+    }
     let writeBack;
     try {
         const save = fs.readFileSync("./intro-cache.json", 'utf8');
@@ -312,8 +321,14 @@ async function writeToIntroCache(userId, messageId, guildId) {
 /** caches the entire intro cache for a specific guild
  * @param {string} guildId - the ID of the guild
  * @param {object} cache - the intro cache object to save
+ * @param {boolean} force - if true, forces writing to disk even if memory cache exists
  */
-async function writeGuildIntroCache(guildId, cache) {
+async function writeGuildIntroCache(guildId, cache, force = false) {
+    if (introCache[guildId] && !force) {
+        introCache[guildId] = cache;
+        return;
+    }
+
     let writeBack;
     try {
         const save = fs.readFileSync("./intro-cache.json", 'utf8');
@@ -380,9 +395,24 @@ async function readEntireIntroCache() {
 
 /** clears the intro cache for a specific guild
  * @param {string} guildId - the ID of the guild
+ * @param {boolean} force - if true, forces clearing from disk even if memory cache exists
  */
-async function clearGuildIntroCache(guildId) {
+async function clearGuildIntroCache(guildId, force = false) {
     guildPriorityCheck(guildId);
+    let overrides = [];
+    try {
+        overrides = await readOverridesForGuild(guildId);
+    } catch (err) {
+        overrides = [];
+    }
+    if (introCache[guildId] && !force) {
+        for (const userId of Object.keys(introCache[guildId])) {
+            if (overrides.includes(userId)) continue;
+            delete introCache[guildId][userId];
+        }
+        if (Object.keys(introCache[guildId]).length === 0) delete introCache[guildId];
+        return;
+    }
     let writeBack;
     try {
         const save = fs.readFileSync("./intro-cache.json", 'utf8');
@@ -391,21 +421,11 @@ async function clearGuildIntroCache(guildId) {
         writeBack = {}; // if the file doesn't exist or is empty
     }
     if (writeBack[guildId]) {
-        let overrides = [];
-        try {
-            overrides = await readOverridesForGuild(guildId);
-        } catch (err) {
-            overrides = [];
-        }
         for (const userId of Object.keys(writeBack[guildId])) {
-            if (overrides.includes(userId)) {
-                continue;
-            }
+            if (overrides.includes(userId)) continue;
             delete writeBack[guildId][userId];
         }
-        if (Object.keys(writeBack[guildId]).length === 0) {
-            delete writeBack[guildId];
-        }
+        if (Object.keys(writeBack[guildId]).length === 0) delete writeBack[guildId];
     }
     try {
         fs.writeFileSync('./intro-cache.json', JSON.stringify(writeBack, null, 2));
@@ -416,10 +436,18 @@ async function clearGuildIntroCache(guildId) {
 /** clears the intro cache for a specific user in a specific guild
  * @param {string} guildId - the ID of the guild
  * @param {string} userId - the ID of the user
+ * @param {boolean} force - if true, forces clearing from disk even if memory cache exists
  */
-async function clearUserIntroCache(guildId, userId) {
+async function clearUserIntroCache(guildId, userId, force = false) {
     guildPriorityCheck(guildId);
     if (!guildId || !userId) return;
+    if (introCache[guildId] && !force) {
+        if (introCache[guildId][userId]) {
+            delete introCache[guildId][userId];
+        }
+        if (Object.keys(introCache[guildId]).length === 0) delete introCache[guildId];
+        return;
+    }
     let writeBack;
     try {
         const save = fs.readFileSync("./intro-cache.json", 'utf8');
@@ -648,11 +676,44 @@ async function guildPriorityCheck(guildId) {
         if ((now - guildLastUsed[guildId]) < 300) { // 5 minutes
             introCache[guildId] = await readGuildIntroCache(guildId);
         } else if (introCache[guildId]) {
-            await writeGuildIntroCache(guildId, introCache[guildId] || {});
-            delete introCache[guildId];
+            await clearGuildMemoryCache(guildId);
         }
     }
     guildLastUsed[guildId] = now
+}
+
+/** clears all guild caches from memory and writes them to disk
+ * 
+ */
+async function clearMemoryCache() {
+    for (const guildId of Object.keys(introCache)) {
+        await writeGuildIntroCache(guildId, introCache[guildId] || {}, true);
+        delete introCache[guildId];
+    }
+}
+
+/** clears memory cache for a specific guild
+ * @param {string} guildId - the ID of the guild
+ */
+async function clearGuildMemoryCache(guildId) {
+    if (introCache[guildId]) {
+        await writeGuildIntroCache(guildId, introCache[guildId] || {}, true);
+        delete introCache[guildId];
+    }
+}
+
+/** clears memory cache for a specific user in a specific guild
+ * @param {string} guildId - the ID of the guild
+ * @param {string} userId - the ID of the user
+ */
+async function clearUserMemoryCache(guildId, userId) {
+    if (introCache[guildId] && introCache[guildId][userId]) {
+        await writeGuildIntroCache(guildId, introCache[guildId] || {}, true);
+        delete introCache[guildId][userId];
+        if (Object.keys(introCache[guildId]).length === 0) {
+            delete introCache[guildId];
+        }
+    }
 }
 
 //===========================
