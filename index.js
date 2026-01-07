@@ -173,8 +173,6 @@ client.on('messageCreate', async message => {
     if (cmd === 'override') return handleOverride();
     if (['me', 'my', 'mine', 'myself'].includes(cmd)) return handleMe();
     if (cmd === 'uptime') return send(createTemplateEmbed('simple', ['Uptime', `<t:${uptimestamp}>, <t:${uptimestamp}:R>.`]));
-    //temp
-    if (cmd === 'clearmem') return clearMemoryCache().then(() => send(createTemplateEmbed('simple', ['Memory Cache Cleared', 'All guild intro caches have been written to disk and cleared from memory.'])));
     return handleLookup();
 });
 
