@@ -172,7 +172,7 @@ client.on('messageCreate', async message => {
     if (['update', 'refresh', 'recache'].includes(cmd)) return handleUpdate();
     if (cmd === 'override') return handleOverride();
     if (['me', 'my', 'mine', 'myself'].includes(cmd)) return handleMe();
-    if (cmd === 'uptime') return send(createTemplateEmbed('simple', ['Uptime', `<t:${uptimestamp}>, <t:${uptimestamp}:R>.`]));
+    if (cmd === 'uptime') return send(createTemplateEmbed('uptime', ['About !ntro', 'Uptime', `<t:${uptimestamp}:R>, <t:${uptimestamp}>`, 'Last Updated', `<t:${await fetchGithubCommitTimestamp()}:R>, <t:${await fetchGithubCommitTimestamp()}>`, 'https://github.com/pixtelslinks/intro-bot']).setFooter({ text: 'github.com/pixtelslinks/intro-bot', iconURL: 'https://github.githubassets.com/favicons/favicon-dark.png' }));
     return handleLookup();
 });
 
@@ -738,6 +738,19 @@ async function resolveUserId(identifier, guildid) {
     return null;
 }
 
+/** fetches time since most recent github commit
+ * @return {Promise<number>} - the unix timestamp of the most recent commit
+ */
+async function fetchGithubCommitTimestamp() {
+    try {
+        const response = await fetch('https://api.github.com/repos/pixtelslinks/intro-bot/commits/main');
+        const data = await response.json();
+        return Math.floor(new Date(data.commit.author.date).getTime() / 1000);
+    } catch (error) {
+        return Math.floor(Date.now() / 1000);
+    }
+}
+
 //===========================
 // embed functions
 
@@ -873,6 +886,16 @@ function createTemplateEmbed(type, text) {
         const embed = new EmbedBuilder()
             .setTitle(text || text[0])
             .setColor(COLOR_ERROR);
+        return embed;
+    } else if (type === 'uptime') {
+        const embed = new EmbedBuilder()
+            .setTitle(text[0])
+            .addFields(
+                { name: text[1], value: text[2] },
+                { name: text[3], value: text[4] }
+            )
+            .setURL(text[5])
+            .setColor(COLOR_SIMPLE);
         return embed;
     }
 }
