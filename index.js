@@ -1,6 +1,6 @@
 require('dotenv').config();
 const fs = require('fs');
-const { Client, GatewayIntentBits, EmbedBuilder, SimpleContextFetchingStrategy } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, SimpleContextFetchingStrategy, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { clear } = require('console');
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMembers] });
 const uptimestamp = Math.floor(Date.now() / 1000);
@@ -137,7 +137,14 @@ client.on('messageCreate', async message => {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
         if (!introMessage) return send(createTemplateEmbed('simple', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.globalName || message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-        return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro update\` to search again!']));
+        const introEmbed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?']);
+        const updateRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`ntro_update:${message.guild.id}:${userId}`)
+                .setLabel('Update Intro')
+                .setStyle(ButtonStyle.Secondary)
+        );
+        return message.channel.send({ embeds: [introEmbed], components: [updateRow] });
     };
 
     const handleLookup = async () => {
@@ -167,17 +174,93 @@ client.on('messageCreate', async message => {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
         if (!introMessage) return send(createTemplateEmbed('simple', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.globalName || message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-        return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro update\` to search again!']));
+        const introEmbed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?']);
+        const updateRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`ntro_update:${message.guild.id}:${userId}`)
+                .setLabel('Update Intro')
+                .setStyle(ButtonStyle.Secondary)
+        );
+        return message.channel.send({ embeds: [introEmbed], components: [updateRow] });
+    };
+
+    const handleUptime = async () => {
+        const embed = createTemplateEmbed('uptime', ['!ntro Status', 'Uptime', `<t:${uptimestamp}:R>, <t:${uptimestamp}>`, 'Last Updated', `<t:${await fetchGithubCommitTimestamp()}:R>, <t:${await fetchGithubCommitTimestamp()}>`]).setFooter({ text: 'github.com/pixtelslinks/intro-bot', iconURL: 'https://github.githubassets.com/favicons/favicon-dark.png' })
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setLabel('Visit GitHub')
+                .setStyle(ButtonStyle.Link)
+                .setURL('https://github.com/pixtelslinks/intro-bot')
+        );
+        return message.channel.send({ embeds: [embed], components: [row] });
     };
 
     // dispatch
     if (cmd === 'help') return send(createHelpMessage(isManage));
-    if (['config', 'configure', 'setup']) return handleConfig();
+    if (['config', 'configure', 'setup'].includes(cmd)) return handleConfig();
     if (['update', 'refresh', 'recache'].includes(cmd)) return handleUpdate();
     if (cmd === 'override') return handleOverride();
     if (['me', 'my', 'mine', 'myself'].includes(cmd)) return handleMe();
-    if (['uptime', 'status', 'about'].includes(cmd)) return send(createTemplateEmbed('uptime', ['About !ntro', 'Uptime', `<t:${uptimestamp}:R>, <t:${uptimestamp}>`, 'Last Updated', `<t:${await fetchGithubCommitTimestamp()}:R>, <t:${await fetchGithubCommitTimestamp()}>`, 'https://github.com/pixtelslinks/intro-bot']).setFooter({ text: 'github.com/pixtelslinks/intro-bot', iconURL: 'https://github.githubassets.com/favicons/favicon-dark.png' }));
+    if (['uptime', 'status', 'about'].includes(cmd)) return handleUptime();
     return handleLookup();
+});
+
+// Interaction handler for update buttons
+client.on('interactionCreate', async (interaction) => {
+    if (!interaction.isButton()) return;
+    if (!interaction.customId || !interaction.customId.startsWith('ntro_update:')) return;
+    const parts = interaction.customId.split(':');
+    if (parts.length < 3) return;
+    const guildId = parts[1];
+    const targetUserId = parts[2];
+    const overrides = await readOverridesForGuild(guildId).catch(() => []);
+
+    // await interaction.deferReply({ ephemeral: false }).catch(() => { });
+    await interaction.channel.sendTyping().catch(() => { });
+    if (interaction.user.id !== targetUserId) return interaction.reply({ content: 'You are not allowed to update this intro.' }).catch(() => { });
+    if (overrides.includes(targetUserId)) return interaction.reply({ content: 'You have a manual intro override set. Use `!ntro override clear` to remove it before updating.' }).catch(() => { });
+
+    try {
+        await clearUserIntroCache(guildId, targetUserId).catch(() => { });
+        const guild = await client.guilds.fetch(guildId).catch(() => null);
+        if (!guild) return interaction.reply({ content: 'Could not access the guild to update intro.' });
+        const fakeMessage = { guild: guild, guildId: guildId };
+        const introMessage = await findIntro(guildId, targetUserId, fakeMessage);
+        await writeToIntroCache(targetUserId, introMessage ? introMessage.id : null, guildId).catch(() => { });
+
+        if (typeof introMessage === 'string') {
+            return interaction.reply({ content: `Error updating intro: ${introMessage}` }).catch(() => { });
+        }
+        if (!introMessage) {
+            return interaction.reply({ content: 'Intro not found for that user.' }).catch(() => { });
+        }
+
+        try {
+            const newComponents = interaction.message.components.map(row => {
+                const newRow = new ActionRowBuilder();
+                const comps = row.components.map(comp => {
+                    const btn = new ButtonBuilder()
+                        .setCustomId(comp.customId)
+                        .setLabel(comp.label || '')
+                        .setStyle(comp.style || ButtonStyle.Secondary)
+                        .setDisabled(comp.customId === interaction.customId ? true : (comp.disabled || false));
+                    if (comp.url) btn.setURL(comp.url);
+                    return btn;
+                });
+                newRow.addComponents(...comps);
+                return newRow;
+            });
+            await interaction.message.edit({ components: newComponents }).catch(() => { });
+        } catch (err) {
+            // non-fatal
+        }
+
+        const user = await client.users.fetch(targetUserId).catch(() => null);
+        const introEmbed = createTemplateEmbed('intro', [(user?.globalName || user?.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (user?.displayAvatarURL ? user.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!']);
+        return interaction.reply({ embeds: [introEmbed] }).catch(() => { });
+    } catch (err) {
+        return interaction.reply({ content: `Error during update: ${err?.message || err}` }).catch(() => { });
+    }
 });
 
 client.login(process.env.DISCORD_TOKEN);
@@ -898,7 +981,6 @@ function createTemplateEmbed(type, text) {
                 { name: text[1], value: text[2] },
                 { name: text[3], value: text[4] }
             )
-            .setURL(text[5])
             .setColor(COLOR_SIMPLE);
         return embed;
     }
