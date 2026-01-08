@@ -79,7 +79,7 @@ client.on('messageCreate', async message => {
     const handleUpdate = async () => {
         const sub = (args[1] || '').toLowerCase();
         const guildId = message.guild.id;
-        if (sub === 'all') {
+        if (['server', 'guild', 'all', 'everything'].includes(sub)) {
             if (!isManage) return send(createTemplateEmbed('error', ['You do not have permission to update the intro cache for this server', 'This command requires the Manage Channels permission']));
             await clearGuildIntroCache(guildId);
             send(createTemplateEmbed('simple', ['Updating Intro Cache', 'This may take a while depending on the number of intro messages.']));
@@ -121,6 +121,10 @@ client.on('messageCreate', async message => {
         if (!args[1]) return send(createDetailedHelpMessage('override', message));
         const userId = message.author.id;
         const guildId = message.guild.id;
+        if (['clear', 'remove', 'delete', 'update'].includes(args[1].toLowerCase())) {
+            await removeGuildOverride(guildId, userId);
+            return send(createTemplateEmbed('simple', ['Intro Override Removed', 'Your intro override has been removed. Future `!ntro` commands will use the cached intro message. Use `!ntro update force` to refresh your intro cache.']));
+        }
         const overriddenMessage = await overrideCacheWithLink(guildId, userId, args[1], message);
         if (overriddenMessage?.content) return send(createTemplateEmbed('simple', ['Intro Cache Overridden', `Your intro cache has been overridden with the provided message: ${overriddenMessage.url}`]));
     };
@@ -168,11 +172,11 @@ client.on('messageCreate', async message => {
 
     // dispatch
     if (cmd === 'help') return send(createHelpMessage(isManage));
-    if (cmd === 'config') return handleConfig();
+    if (['config', 'configure', 'setup']) return handleConfig();
     if (['update', 'refresh', 'recache'].includes(cmd)) return handleUpdate();
     if (cmd === 'override') return handleOverride();
     if (['me', 'my', 'mine', 'myself'].includes(cmd)) return handleMe();
-    if (cmd === 'uptime') return send(createTemplateEmbed('uptime', ['About !ntro', 'Uptime', `<t:${uptimestamp}:R>, <t:${uptimestamp}>`, 'Last Updated', `<t:${await fetchGithubCommitTimestamp()}:R>, <t:${await fetchGithubCommitTimestamp()}>`, 'https://github.com/pixtelslinks/intro-bot']).setFooter({ text: 'github.com/pixtelslinks/intro-bot', iconURL: 'https://github.githubassets.com/favicons/favicon-dark.png' }));
+    if (['uptime', 'status', 'about'].includes(cmd)) return send(createTemplateEmbed('uptime', ['About !ntro', 'Uptime', `<t:${uptimestamp}:R>, <t:${uptimestamp}>`, 'Last Updated', `<t:${await fetchGithubCommitTimestamp()}:R>, <t:${await fetchGithubCommitTimestamp()}>`, 'https://github.com/pixtelslinks/intro-bot']).setFooter({ text: 'github.com/pixtelslinks/intro-bot', iconURL: 'https://github.githubassets.com/favicons/favicon-dark.png' }));
     return handleLookup();
 });
 
