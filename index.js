@@ -217,22 +217,22 @@ client.on('interactionCreate', async (interaction) => {
 
     // await interaction.deferReply({ ephemeral: false }).catch(() => { });
     await interaction.channel.sendTyping().catch(() => { });
-    if (interaction.user.id !== targetUserId) return interaction.reply({ content: 'You are not allowed to update this intro.' }).catch(() => { });
-    if (overrides.includes(targetUserId)) return interaction.reply({ content: 'You have a manual intro override set. Use `!ntro override clear` to remove it before updating.' }).catch(() => { });
+    if (interaction.user.id !== targetUserId) return interaction.reply({ embeds: [createTemplateEmbed('warning', `You cannot update someone else's intro`)], ephemeral: true }).catch(() => { });
+    if (overrides.includes(targetUserId)) return interaction.reply({ embeds: [createTemplateEmbed('error', ['Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.'])], ephemeral: true }).catch(() => { });
 
     try {
         await clearUserIntroCache(guildId, targetUserId).catch(() => { });
         const guild = await client.guilds.fetch(guildId).catch(() => null);
-        if (!guild) return interaction.reply({ content: 'Could not access the guild to update intro.' });
+        if (!guild) return interaction.reply({ embeds: [createTemplateEmbed('error', ['Guild Not Found', 'Could not find the guild for this interaction.'])], ephemeral: true }).catch(() => { });
         const fakeMessage = { guild: guild, guildId: guildId };
         const introMessage = await findIntro(guildId, targetUserId, fakeMessage);
         await writeToIntroCache(targetUserId, introMessage ? introMessage.id : null, guildId).catch(() => { });
 
         if (typeof introMessage === 'string') {
-            return interaction.reply({ content: `Error updating intro: ${introMessage}` }).catch(() => { });
+            return interaction.reply({ embeds: [createTemplateEmbed('error', ['Error', introMessage])] }).catch(() => { });
         }
         if (!introMessage) {
-            return interaction.reply({ content: 'Intro not found for that user.' }).catch(() => { });
+            return interaction.reply({ embeds: [createTemplateEmbed('simple', ['Intro Not Found', `You have not sent an intro yet.`])] }).catch(() => { });
         }
 
         try {
@@ -256,8 +256,7 @@ client.on('interactionCreate', async (interaction) => {
         }
 
         const user = await client.users.fetch(targetUserId).catch(() => null);
-        const introEmbed = createTemplateEmbed('intro', [(user?.globalName || user?.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (user?.displayAvatarURL ? user.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!']);
-        return interaction.reply({ embeds: [introEmbed] }).catch(() => { });
+        return interaction.reply({ embeds: [createTemplateEmbed('intro', [(user?.globalName || user?.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (user?.displayAvatarURL ? user.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!'])] }).catch(() => { });
     } catch (err) {
         return interaction.reply({ content: `Error during update: ${err?.message || err}` }).catch(() => { });
     }
