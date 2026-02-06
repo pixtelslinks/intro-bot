@@ -6,6 +6,8 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBit
 const uptimestamp = Math.floor(Date.now() / 1000);
 let guildLastUsed = {};
 let introCache = {};
+let configCache = {};
+let overrideCache = {};
 
 // colors
 const COLOR_SIMPLE = 0x5ECEB6;
@@ -17,6 +19,7 @@ client.once('ready', () => {
 });
 
 client.on('messageCreate', async message => {
+    console.log("guildLastUsed:" + JSON.stringify(guildLastUsed) + "\nintroCache:" + JSON.stringify(introCache) + "\nconfigCache:" + JSON.stringify(configCache) + "\noverrideCache:" + JSON.stringify(overrideCache));
     if (message.author?.bot) return;
     const triggers = [`!ntro`, `!intro`, `<@!${client.user.id}>`, `<@${client.user.id}>`];
     if (!triggers.some(t => message.content.startsWith(t))) return;
@@ -30,12 +33,12 @@ client.on('messageCreate', async message => {
     const send = embed => message.channel.send({ embeds: [embed] });
 
     const handleConfig = async () => {
-        if (!isManage) return send(createTemplateEmbed('error', ['You do not have permission to configure for this server', 'This command requires the Manage Channels permission']));
+        if (!isManage) return send(createTemplateEmbed('warning', 'This command requires the Manage Channels permission'));
         const sub = (args[1] || '').toLowerCase();
         const guildId = message.guild.id;
+        const config = await readGuildConfig(guildId);
         if (['channel', 'add', 'set'].includes(sub)) {
             if (!args[2]) {
-                const config = await readGuildConfig(guildId);
                 if (config?.chId) {
                     send(createTemplateEmbed('one-line', `The current intro channel is <#${config.chId}>`));
                     return send(createDetailedHelpMessage('config channel', message));
@@ -54,7 +57,7 @@ client.on('messageCreate', async message => {
             cfg.chId = channelId;
             await writeGuildConfig(guildId, cfg);
             await clearGuildIntroCache(guildId);
-            return send(createTemplateEmbed('simple', ['Intro Channel Set', `Intro channel set to <#${channelId}> for this server.`]));
+            return send(createTemplateEmbed('simple', ['Intro Channel Set', `Intro channel set to <#${channelId}> for this server`]));
         }
 
         if (sub === 'mode') {
@@ -73,14 +76,16 @@ client.on('messageCreate', async message => {
             return;
         }
 
+        send(createTemplateEmbed('one-line', `The current intro channel is <#${config.chId}>`));
+        send(createTemplateEmbed('one-line', `The current mode is **${(await readGuildConfig(guildId))?.mode || 'not set'}**`));
         return send(createDetailedHelpMessage('config', message));
     };
 
     const handleUpdate = async () => {
         const sub = (args[1] || '').toLowerCase();
         const guildId = message.guild.id;
-        if (['server', 'guild', 'all', 'everything'].includes(sub)) {
-            if (!isManage) return send(createTemplateEmbed('error', ['You do not have permission to update the intro cache for this server', 'This command requires the Manage Channels permission']));
+        if (['server', 'guild', 'all', 'everything', 'everyone'].includes(sub)) {
+            if (!isManage) return send(createTemplateEmbed('warning', 'This command requires the Manage Channels permission'));
             await clearGuildIntroCache(guildId);
             send(createTemplateEmbed('simple', ['Updating Intro Cache', 'This may take a while depending on the number of intro messages.']));
             try {
@@ -95,26 +100,33 @@ client.on('messageCreate', async message => {
         if (['force', 'override', 'reset'].includes(sub)) {
             await removeGuildOverride(guildId, userId);
             await clearUserIntroCache(guildId, userId);
+            await clearUserIntroCache(guildId, userId, true);
             const introMessage = await findIntro(guildId, userId, message);
             await writeToIntroCache(userId, introMessage ? introMessage.id : null, guildId);
             if (typeof introMessage === 'string') {
-                return send(createTemplateEmbed('error', ['Error', introMessage]));
+                return send(createTemplateEmbed('error', ['Error Overriding', introMessage]));
             }
             if (!introMessage) return send(createTemplateEmbed('error', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-            return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!']));
+            return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro override has been removed\n${introMessage ? introMessage.url : 'No intro found.'}`, (introMessage?.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!']));
         }
 
         // update me (default)
-        const overrides = await readOverridesForGuild(message.guildId);
-        if (overrides.includes(userId)) return send(createTemplateEmbed('error', ['Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.']));
+        const overrides = await readGuildOverrides(message.guildId);
+        if (overrides.includes(userId)) {
+            return message.channel.send({ embeds: [createTemplateEmbed('error', ['Intro Override Active', 'You have manually set an intro'])], components: [createButton('Remove Override', `ntro_override_clear:${message.guild.id}:${userId}`, ButtonStyle.Danger)] });
+        }//return send(createTemplateEmbed('error', ['Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.']));
         await clearUserIntroCache(guildId, userId);
+        await clearUserIntroCache(guildId, userId, true);
+        console.log("Cleared user intro cache for userId:" + userId + " guildId:" + guildId);
+        console.log("Intro cache after clear:" + JSON.stringify(introCache));
         const introMessage = await findIntro(guildId, userId, message);
+        console.log("Found intro message:" + (introMessage ? introMessage.id : 'null'));
         await writeToIntroCache(userId, introMessage ? introMessage.id : null, guildId);
         if (typeof introMessage === 'string') {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
         if (!introMessage) return send(createTemplateEmbed('simple', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.globalName || message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-        return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry \`!ntro override\` with a message link to set one manually!']));
+        return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!']));
     };
 
     const handleOverride = async () => {
@@ -122,29 +134,47 @@ client.on('messageCreate', async message => {
         const userId = message.author.id;
         const guildId = message.guild.id;
         if (['clear', 'remove', 'delete', 'update'].includes(args[1].toLowerCase())) {
-            await removeGuildOverride(guildId, userId);
-            return send(createTemplateEmbed('simple', ['Intro Override Removed', 'Your intro override has been removed. Future `!ntro` commands will use the cached intro message. Use `!ntro update force` to refresh your intro cache.']));
+            const overrides = await readGuildOverrides(guildId);
+            if (overrides.includes(userId)) {
+                await removeGuildOverride(guildId, userId);
+                await clearUserIntroCache(guildId, userId);
+                const introMessage = await findIntro(guildId, userId, message);
+                await writeToIntroCache(userId, introMessage ? introMessage.id : null, guildId);
+                if (typeof introMessage === 'string') {
+                    return send(createTemplateEmbed('error', ['Error', introMessage]));
+                }
+                writeGuildIntroCache(guildId, introCache[guildId] || {}, true);
+                return send(createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, `Your intro override has been removed\n${introMessage ? introMessage.url : 'No intro found.'}`, (introMessage?.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!']));
+            } else {
+                return send(createTemplateEmbed('error', ['No Override Found', 'You do not have an active intro override to clear.']));
+            }
         }
         const overriddenMessage = await overrideCacheWithLink(guildId, userId, args[1], message);
-        if (overriddenMessage?.content) return send(createTemplateEmbed('simple', ['Intro Cache Overridden', `Your intro cache has been overridden with the provided message: ${overriddenMessage.url}`]));
+        if (overriddenMessage?.content) return send(createTemplateEmbed('intro', [(overriddenMessage.author.globalName || overriddenMessage.author.username) + `'s intro`, `Your intro has been overridden\n${overriddenMessage.url}`, (overriddenMessage?.author?.displayAvatarURL ? overriddenMessage.author.displayAvatarURL() : null), 'This intro was set manually\nUse `!ntro override clear` to automatically select an intro']));
     };
 
     const handleMe = async () => {
         const userId = message.author.id;
         const guildId = message.guild.id;
-        const introMessage = await findIntro(guildId, userId, message);
+        let introMessage = null;
+        if (readFromIntroCache(userId, guildId)) {
+            console.log("Using cached intro for userId:" + userId + " guildId:" + guildId);
+            const cachedMessageId = await readFromIntroCache(userId, guildId);
+            introMessage = await fetchIntroMessageById(guildId, cachedMessageId, message);
+        } else {
+            introMessage = await findIntro(guildId, userId, message);
+        }
         if (typeof introMessage === 'string') {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
         if (!introMessage) return send(createTemplateEmbed('simple', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.globalName || message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-        const introEmbed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?']);
-        const updateRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`ntro_update:${message.guild.id}:${userId}`)
-                .setLabel('Update Intro')
-                .setStyle(ButtonStyle.Secondary)
-        );
-        return message.channel.send({ embeds: [introEmbed], components: [updateRow] });
+        const overrides = await readGuildOverrides(message.guildId);
+        const introEmbed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), overrides.includes(userId) ? 'This intro was set manually\nUse `!ntro override clear` to automatically select an intro' : 'Did I get this intro wrong?']);
+        if (!overrides.includes(userId)) {
+            return message.channel.send({ embeds: [introEmbed], components: [createButton('Update Intro', `ntro_update:${message.guild.id}:${userId}`, ButtonStyle.Secondary)] });
+        } else {
+            return send(introEmbed);
+        }
     };
 
     const handleLookup = async () => {
@@ -162,6 +192,7 @@ client.on('messageCreate', async message => {
                 return send(createTemplateEmbed('error', ['Did you mean `!ntro config channel`?', 'Use `!ntro help` to see available commands.']));
             }
         }
+        const guildId = message.guild.id;
         const userId = await resolveUserId(identifier, message.guildId);
         if (!userId) return send(createTemplateEmbed('error', ['User not found', `Could not find a user with: ${identifier}`]));
         try {
@@ -169,19 +200,25 @@ client.on('messageCreate', async message => {
         } catch (err) {
             return send(createTemplateEmbed('error', ['User not found', `Could not find a user with: ${identifier}`]));
         }
-        const introMessage = await findIntro(message.guild.id, userId, message);
+        let introMessage = null;
+        if (readFromIntroCache(userId, guildId)) {
+            console.log("Using cached intro for userId:" + userId + " guildId:" + guildId);
+            const cachedMessageId = await readFromIntroCache(userId, guildId);
+            introMessage = await fetchIntroMessageById(guildId, cachedMessageId, message);
+        } else {
+            introMessage = await findIntro(guildId, userId, message);
+        }
         if (typeof introMessage === 'string') {
             return send(createTemplateEmbed('error', ['Error', introMessage]));
         }
+        const overrides = await readGuildOverrides(message.guildId);
         if (!introMessage) return send(createTemplateEmbed('simple', ['Intro Not Found', `${message.guild.members.cache.get(userId).user.globalName || message.guild.members.cache.get(userId).user.username} has not sent an intro yet.`]));
-        const introEmbed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?']);
-        const updateRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`ntro_update:${message.guild.id}:${userId}`)
-                .setLabel('Update Intro')
-                .setStyle(ButtonStyle.Secondary)
-        );
-        return message.channel.send({ embeds: [introEmbed], components: [updateRow] });
+        const introEmbed = createTemplateEmbed('intro', [(introMessage.author.globalName || introMessage.author.username) + `'s intro`, introMessage.url, (introMessage.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), overrides.includes(userId) ? 'This intro was set manually\nUse `!ntro override clear` to automatically select an intro' : 'Did I get this intro wrong?']);
+        if (!overrides.includes(userId)) {
+            return message.channel.send({ embeds: [introEmbed], components: [createButton('Update Intro', `ntro_update:${message.guild.id}:${userId}`, ButtonStyle.Secondary)] });
+        } else {
+            return send(introEmbed);
+        }
     };
 
     const handleUptime = async () => {
@@ -205,62 +242,61 @@ client.on('messageCreate', async message => {
     return handleLookup();
 });
 
-// Interaction handler for update buttons
+// Interaction handler
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
-    if (!interaction.customId || !interaction.customId.startsWith('ntro_update:')) return;
+    if (!interaction.customId) return;
     const parts = interaction.customId.split(':');
     if (parts.length < 3) return;
     const guildId = parts[1];
     const targetUserId = parts[2];
-    const overrides = await readOverridesForGuild(guildId).catch(() => []);
+    const overrides = await readGuildOverrides(guildId).catch(() => []);
 
-    // await interaction.deferReply({ ephemeral: false }).catch(() => { });
     await interaction.channel.sendTyping().catch(() => { });
-    if (interaction.user.id !== targetUserId) return interaction.reply({ embeds: [createTemplateEmbed('warning', `You cannot update someone else's intro`)], ephemeral: true }).catch(() => { });
-    if (overrides.includes(targetUserId)) return interaction.reply({ embeds: [createTemplateEmbed('error', ['Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.'])], ephemeral: true }).catch(() => { });
 
-    try {
-        await clearUserIntroCache(guildId, targetUserId).catch(() => { });
+    if (interaction.customId.startsWith('ntro_update:')) {
+        if (interaction.user.id !== targetUserId) return interaction.reply({ embeds: [createTemplateEmbed('warning', `You cannot update someone else's intro`)], ephemeral: true }).catch(() => { });
+        if (overrides.includes(targetUserId)) return interaction.reply({ embeds: [createTemplateEmbed('error', ['Intro Override Active', 'You have manually set an intro. Use `!ntro update force` to update anyway.'])], ephemeral: true }).catch(() => { });
+        try {
+            await clearUserIntroCache(guildId, targetUserId).catch(() => { });
+            await clearUserIntroCache(guildId, targetUserId, true).catch(() => { });
+            const guild = await client.guilds.fetch(guildId).catch(() => null);
+            if (!guild) return interaction.reply({ embeds: [createTemplateEmbed('error', ['Guild Not Found', 'Could not find the guild for this interaction.'])], ephemeral: true }).catch(() => { });
+            const fakeMessage = { guild: guild, guildId: guildId };
+            const introMessage = await findIntro(guildId, targetUserId, fakeMessage);
+            await writeToIntroCache(targetUserId, introMessage ? introMessage.id : null, guildId).catch(() => { });
+
+            if (typeof introMessage === 'string') {
+                return interaction.reply({ embeds: [createTemplateEmbed('error', ['Error', introMessage])] }).catch(() => { });
+            }
+            if (!introMessage) {
+                return interaction.reply({ embeds: [createTemplateEmbed('simple', ['Intro Not Found', `You have not sent an intro yet.`])] }).catch(() => { });
+            }
+            disableButtonInteraction(interaction);
+            const user = await client.users.fetch(targetUserId).catch(() => null);
+            return interaction.reply({ embeds: [createTemplateEmbed('intro', [(user?.globalName || user?.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (user?.displayAvatarURL ? user.displayAvatarURL() : null), overrides.includes(targetUserId) ? 'This intro was set manually\nUse `!ntro override clear` to automatically select an intro' : 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!'])] }).catch(() => { });
+        } catch (err) {
+            return interaction.reply({ content: `Error during update: ${err?.message || err}` }).catch(() => { });
+        }
+    } else if (interaction.customId.startsWith('ntro_override_clear:')) {
+        if (interaction.user.id !== targetUserId) return interaction.reply({ embeds: [createTemplateEmbed('warning', `You cannot remove someone else's intro override`)], ephemeral: true }).catch(() => { });
+        if (!overrides.includes(targetUserId)) {
+            return interaction.reply({ embeds: [createTemplateEmbed('error', ['No Override Found', 'You do not have an active intro override to clear.'])], ephemeral: true }).catch(() => { });
+        }
+        await removeGuildOverride(guildId, targetUserId).catch(() => { });
         const guild = await client.guilds.fetch(guildId).catch(() => null);
         if (!guild) return interaction.reply({ embeds: [createTemplateEmbed('error', ['Guild Not Found', 'Could not find the guild for this interaction.'])], ephemeral: true }).catch(() => { });
         const fakeMessage = { guild: guild, guildId: guildId };
-        const introMessage = await findIntro(guildId, targetUserId, fakeMessage);
-        await writeToIntroCache(targetUserId, introMessage ? introMessage.id : null, guildId).catch(() => { });
-
-        if (typeof introMessage === 'string') {
-            return interaction.reply({ embeds: [createTemplateEmbed('error', ['Error', introMessage])] }).catch(() => { });
-        }
-        if (!introMessage) {
-            return interaction.reply({ embeds: [createTemplateEmbed('simple', ['Intro Not Found', `You have not sent an intro yet.`])] }).catch(() => { });
-        }
-
-        try {
-            const newComponents = interaction.message.components.map(row => {
-                const newRow = new ActionRowBuilder();
-                const comps = row.components.map(comp => {
-                    const btn = new ButtonBuilder()
-                        .setCustomId(comp.customId)
-                        .setLabel(comp.label || '')
-                        .setStyle(comp.style || ButtonStyle.Secondary)
-                        .setDisabled(comp.customId === interaction.customId ? true : (comp.disabled || false));
-                    if (comp.url) btn.setURL(comp.url);
-                    return btn;
-                });
-                newRow.addComponents(...comps);
-                return newRow;
-            });
-            await interaction.message.edit({ components: newComponents }).catch(() => { });
-        } catch (err) {
-            // non-fatal
-        }
-
-        const user = await client.users.fetch(targetUserId).catch(() => null);
-        return interaction.reply({ embeds: [createTemplateEmbed('intro', [(user?.globalName || user?.username) + `'s intro`, `Your intro has been updated\n${introMessage.url}`, (user?.displayAvatarURL ? user.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!'])] }).catch(() => { });
-    } catch (err) {
-        return interaction.reply({ content: `Error during update: ${err?.message || err}` }).catch(() => { });
+        const introMessage = await findIntro(guildId, targetUserId, fakeMessage).catch(() => null);
+        disableButtonInteraction(interaction);
+        return interaction.reply({ embeds: [createTemplateEmbed('intro', [(introMessage?.author?.globalName || introMessage?.author?.username) + `'s intro`, `Your intro override has been removed\n${introMessage ? introMessage.url : 'No intro found.'}`, (introMessage?.author?.displayAvatarURL ? introMessage.author.displayAvatarURL() : null), 'Did I get this intro wrong?\nTry `!ntro override` with a message link to set one manually!'])] }).catch(() => { });
     }
 });
+
+// periodic memory management
+setInterval(() => {
+    allGuildPriorityCheck();
+}, 600000); // every 10 minutes
 
 client.login(process.env.DISCORD_TOKEN);
 
@@ -270,29 +306,16 @@ client.login(process.env.DISCORD_TOKEN);
 //===========================
 // search functions
 
-/** finds the intro message for a specific user in a guild
+/** finds the intro message for a specific user in a guild from discord, not cache
  * @param {string} guildId - the ID of the guild
  * @param {string} userId - the ID of the user
  * @param {Message} message - the original message that triggered the command
  * @return {Promise<Message>} - the intro message
  */
 async function findIntro(guildId, userId, message) {
-    // check cache first
-    let cachedMessageId = await readFromIntroCache(userId, guildId);
     let guildConfig = await readGuildConfig(guildId);
     if (!guildConfig || !guildConfig.chId) return 'No intro channel configured for this server.';
-    // fetch message from discord if cached
     const introChannel = await message.guild.channels.fetch(guildConfig.chId);
-    if (cachedMessageId) {
-        try {
-            const cachedMessage = await introChannel.messages.fetch(cachedMessageId);
-            if (cachedMessage && cachedMessage.author.id === userId) {
-                return cachedMessage;
-            }
-        } catch (error) {
-            // cache miss, proceed to find the message
-        }
-    }
     let introMessage = null;
     if (guildConfig.mode === 'first') {
         introMessage = await findFirstMessageByUser(introChannel, userId, false);
@@ -362,6 +385,24 @@ async function findAllMessagesByUser(channel, userId) {
     return collected;
 }
 
+/** fetches a message by ID from a guild's intro channel
+ * @param {string} guildId - the ID of the guild
+ * @param {string} messageId - the ID of the message
+ * @param {Message} message - the original message that triggered the command
+ * @return {Promise<Message>} - the fetched message
+ */
+async function fetchIntroMessageById(guildId, messageId, message) {
+    let guildConfig = await readGuildConfig(guildId);
+    if (!guildConfig || !guildConfig.chId) return null;
+    const introChannel = await message.guild.channels.fetch(guildConfig.chId);
+    try {
+        const introMessage = await introChannel.messages.fetch(messageId);
+        return introMessage;
+    } catch (err) {
+        return null;
+    }
+}
+
 //===========================
 // cache functions
 
@@ -375,7 +416,7 @@ async function findAllMessagesByUser(channel, userId) {
 async function writeToIntroCache(userId, messageId, guildId, force = false) {
     guildPriorityCheck(guildId);
     try {
-        const overrides = await readOverridesForGuild(guildId);
+        const overrides = await readGuildOverrides(guildId);
         if (overrides && overrides.includes(userId)) {
             return;
         }
@@ -485,7 +526,7 @@ async function clearGuildIntroCache(guildId, force = false) {
     guildPriorityCheck(guildId);
     let overrides = [];
     try {
-        overrides = await readOverridesForGuild(guildId);
+        overrides = await readGuildOverrides(guildId);
     } catch (err) {
         overrides = [];
     }
@@ -609,8 +650,13 @@ async function cacheAllGuildIntros(guildId) {
 /** writes a guild's configuration to configs.json
  * @param {string} guildId - the ID of the guild
  * @param {object} config - the configuration object to save
+ * @param {boolean} force - if true, forces writing to disk even if memory cache exists
  */
-async function writeGuildConfig(guildId, config) {
+async function writeGuildConfig(guildId, config, force = false) {
+    if (configCache[guildId] && !force) {
+        configCache[guildId] = config;
+        return;
+    }
     let writeBack;
     try {
         const save = fs.readFileSync("./configs.json", 'utf8');
@@ -630,6 +676,9 @@ async function writeGuildConfig(guildId, config) {
  * @return {object|null} - the configuration object, or null if not found
  */
 async function readGuildConfig(guildId) {
+    if (configCache[guildId]) {
+        return configCache[guildId];
+    }
     try {
         const save = fs.readFileSync("./configs.json", 'utf8');
         const parsed = JSON.parse(save);
@@ -647,10 +696,17 @@ async function readGuildConfig(guildId) {
 
 /**
  * Adds a userId to the override list for a guild
- * @param {string} guildId
- * @param {string} userId
+ * @param {string} guildId - the ID of the guild
+ * @param {string} userId - the ID of the user
+ * @param {boolean} force - if true, forces writing to disk even if memory cache exists
  */
-async function addGuildOverride(guildId, userId) {
+async function addGuildOverride(guildId, userId, force = false) {
+    if (overrideCache[guildId] && !force) {
+        if (!overrideCache[guildId].includes(userId)) {
+            overrideCache[guildId].push(userId);
+        }
+        return;
+    }
     let writeBack;
     try {
         const save = fs.readFileSync('./overrides.json', 'utf8');
@@ -671,10 +727,19 @@ async function addGuildOverride(guildId, userId) {
 
 /**
  * Removes a userId from the override list for a guild
- * @param {string} guildId
- * @param {string} userId
+ * @param {string} guildId - the ID of the guild
+ * @param {string} userId - the ID of the user
+ * @param {boolean} force - if true, forces writing to disk even if memory cache exists
  */
-async function removeGuildOverride(guildId, userId) {
+async function removeGuildOverride(guildId, userId, force = false) {
+    if (overrideCache[guildId] && !force) {
+        const idx = overrideCache[guildId].indexOf(userId);
+        if (idx !== -1) {
+            overrideCache[guildId].splice(idx, 1);
+            if (overrideCache[guildId].length === 0) delete overrideCache[guildId];
+        }
+        return;
+    }
     let writeBack;
     try {
         const save = fs.readFileSync('./overrides.json', 'utf8');
@@ -695,27 +760,40 @@ async function removeGuildOverride(guildId, userId) {
     }
 }
 
-/** overrides the cache for a specific user in a specific guild
- * @param {string} guildId - the ID of the guild
- * @param {string} userId - the ID of the user
- * @param {string} message - the message ID to cache
- */
-async function overrideUserIntroCache(guildId, userId, messageId) {
-    await writeToIntroCache(userId, messageId, guildId);
-}
-
 /**
  * Retrieves override user IDs for a guild from overrides.json
  * @param {string} guildId
  * @returns {Promise<string[]>}
  */
-async function readOverridesForGuild(guildId) {
+async function readGuildOverrides(guildId) {
+    if (overrideCache[guildId]) {
+        return overrideCache[guildId];
+    }
     try {
         const save = fs.readFileSync('./overrides.json', 'utf8');
         const parsed = JSON.parse(save);
         return parsed[guildId] || [];
     } catch (err) {
         return [];
+    }
+}
+
+/** writes entire override cache for a specific guild
+ * @param {string} guildId - the ID of the guild
+ * @param {Array<string>} overrides - the array of user IDs to save
+ * @param {boolean} force - if true, forces writing to disk even if memory cache exists
+ */
+async function writeGuildOverrides(guildId, overrides, force = false) {
+    if (overrideCache[guildId] && !force) {
+        overrideCache[guildId] = overrides;
+        return;
+    }
+    let writeBack;
+    try {
+        const save = fs.readFileSync('./overrides.json', 'utf8');
+        writeBack = JSON.parse(save);
+    } catch (err) {
+        writeBack = {};
     }
 }
 
@@ -743,7 +821,7 @@ async function overrideCacheWithLink(guildId, userId, messageLink, message) {
     if (msg.guild.id !== guildId) return message.channel.send({ embeds: [createTemplateEmbed('error', ['Guild Mismatch', 'The message link provided is not from this server.'])] });
     if (msg.channel.id !== (await readGuildConfig(guildId))?.chId) return message.channel.send({ embeds: [createTemplateEmbed('error', ['Channel Mismatch', 'The message is not from the configured intro channel for this server.'])] });
 
-    await overrideUserIntroCache(guildId, userId, messageId);
+    await writeToIntroCache(userId, msg.id, guildId);
     await addGuildOverride(guildId, userId);
     return msg;
 }
@@ -759,11 +837,30 @@ async function guildPriorityCheck(guildId) {
     if (guildLastUsed[guildId]) {
         if ((now - guildLastUsed[guildId]) < 300) { // 5 minutes
             introCache[guildId] = await readGuildIntroCache(guildId);
+            configCache[guildId] = await readGuildConfig(guildId);
+            overrideCache[guildId] = await readGuildOverrides(guildId);
         } else if (introCache[guildId]) {
-            await clearGuildMemoryCache(guildId);
+            await clearGuildCacheMemory(guildId);
+            await clearGuildConfigMemory(guildId);
+            await clearGuildOverrideMemory(guildId);
         }
     }
     guildLastUsed[guildId] = now
+}
+
+/** checks and manages all guild priorities in memory
+ */
+async function allGuildPriorityCheck() {
+    const now = Math.floor(Date.now() / 1000);
+    for (const guildId of Object.keys(guildLastUsed)) {
+        if ((now - guildLastUsed[guildId]) >= 300) { // 5 minutes
+            if (introCache[guildId]) {
+                await clearGuildCacheMemory(guildId);
+            }
+            await clearGuildConfigMemory(guildId);
+            await clearGuildOverrideMemory(guildId);
+        }
+    }
 }
 
 /** clears all guild caches from memory and writes them to disk
@@ -779,7 +876,7 @@ async function clearMemoryCache() {
 /** clears memory cache for a specific guild
  * @param {string} guildId - the ID of the guild
  */
-async function clearGuildMemoryCache(guildId) {
+async function clearGuildCacheMemory(guildId) {
     if (introCache[guildId]) {
         await writeGuildIntroCache(guildId, introCache[guildId] || {}, true);
         delete introCache[guildId];
@@ -797,6 +894,26 @@ async function clearUserMemoryCache(guildId, userId) {
         if (Object.keys(introCache[guildId]).length === 0) {
             delete introCache[guildId];
         }
+    }
+}
+
+/** clears guild configs from memory for a specific guild
+ * @param {string} guildId - the ID of the guild
+ */
+async function clearGuildConfigMemory(guildId) {
+    if (configCache[guildId]) {
+        await writeGuildConfig(guildId, configCache[guildId], true);
+        delete configCache[guildId];
+    }
+}
+
+/** clears override cache from memory for a specific guild
+ * @param {string} guildId - the ID of the guild
+ */
+async function clearGuildOverrideMemory(guildId) {
+    if (overrideCache[guildId]) {
+        await writeGuildOverrides(guildId, overrideCache[guildId], true);
+        delete overrideCache[guildId];
     }
 }
 
@@ -835,6 +952,23 @@ async function fetchGithubCommitTimestamp() {
     } catch (error) {
         return Math.floor(Date.now() / 1000);
     }
+}
+
+/** creates an action row with an individual button
+ * @param {string} label - the button label
+ * @param {string} customId - the button custom ID
+ * @param {ButtonStyle} style - the button style
+ * @param {boolean} disabled - whether the button is disabled
+ * @return {ActionRowBuilder} - the action row with the button
+ */
+function createButton(label, customId, style = ButtonStyle.Primary, disabled = false) {
+    const button = new ButtonBuilder()
+        .setLabel(label)
+        .setCustomId(customId)
+        .setStyle(style)
+        .setDisabled(disabled);
+    const row = new ActionRowBuilder().addComponents(button);
+    return row;
 }
 
 //===========================
@@ -887,7 +1021,7 @@ function createDetailedHelpMessage(topic, message) {
             .setDescription('Commands to configure the !ntro for this server.')
             .addFields(
                 { name: 'Channels', value: 'Use `!ntro config channel [#channel|channelID]` to set or view the intro channel for this server.' },
-                { name: 'Modes', value: 'Use `!ntro config mode [first|last|largest|smart]` to set how the intro message is selected.' },
+                { name: 'Modes', value: 'Use `!ntro config mode [first|last|largest|smart]` to set how the intro message is automatically selected.' },
                 { name: 'Example', value: `!ntro config channel <#${message.channel.id || 'channelId'}>\n!ntro config mode largest` }
             );
         return embed;
@@ -903,7 +1037,7 @@ function createDetailedHelpMessage(topic, message) {
     }
     if (topic === 'config mode') {
         embed.setTitle('Configuring Intro Mode')
-            .setDescription("Choose how a user's intro message is selected from the intro channel.")
+            .setDescription("Choose how a user's intro message is automatically selected from the intro channel.")
             .addFields(
                 { name: 'Available modes', value: '- `first` — first message by the user\n- `last` — last message by the user\n- `largest` — longest message by the user\n- `smart` — message longer than the user\'s average, preferring recent ones' },
                 { name: 'Example', value: '!ntro config mode largest' }
@@ -920,7 +1054,7 @@ function createDetailedHelpMessage(topic, message) {
         return embed;
     }
     if (topic === 'override') {
-        embed.setTitle('Overriding Intro Cache')
+        embed.setTitle('Overriding Automatic Intro Selection')
             .setDescription("Manually select your intro message if !ntro didn't get it right.")
             .addFields(
                 { name: 'Requirements', value: 'The message must be from the configured intro channel and belong to you. Overriding adds you to the override list so your intro won\'t be auto-updated.' },
@@ -986,3 +1120,23 @@ function createTemplateEmbed(type, text) {
 }
 
 //===========================
+// interaction functions
+
+/** disables a button interaction after use
+ * @param {ButtonInteraction} interaction - the button interaction to disable
+ */
+async function disableButtonInteraction(interaction) {
+    if (!interaction || !interaction.isButton()) return;
+    const message = interaction.message;
+    if (!message) return;
+    const components = message.components.map(row => {
+        const newRow = ActionRowBuilder.from(row);
+        newRow.components = newRow.components.map(comp => {
+            const newComp = ButtonBuilder.from(comp);
+            newComp.setDisabled(true);
+            return newComp;
+        });
+        return newRow;
+    });
+    await interaction.message.edit({ components: components });
+}
